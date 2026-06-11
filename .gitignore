@@ -1,0 +1,10 @@
+# Stray home-dir artifacts (may contain credentials) — never commit
+~/
+
+# Playwright MCP session artifacts
+.playwright-mcp/
+
+# Safety nets (kc-outreach has its own .gitignore too)
+node_modules/
+.next/
+.env*
