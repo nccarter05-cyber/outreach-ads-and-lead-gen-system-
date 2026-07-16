@@ -1,6 +1,6 @@
 import { Mail } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { Channel } from "@/lib/data";
+import type { Channel } from "@/lib/types";
 
 // lucide-react removed brand icons, so LinkedIn/Facebook/Instagram
 // are inline SVG glyphs (simple-icons paths).

@@ -6,16 +6,8 @@ import { PageHeader } from "@/components/page-header";
 import { StatCard } from "@/components/stat-card";
 import { ChannelIcon } from "@/components/channel-icon";
 import { TouchStatusBadge, CampaignStatusBadge } from "@/components/status-badge";
-import {
-  campaigns,
-  channelLabels,
-  dailySends,
-  getLead,
-  getSequence,
-  leads,
-  outreachLogs,
-  type Channel,
-} from "@/lib/data";
+import { getCampaigns, getDailySends, getLeads, getOutreachLogs, getSequences } from "@/lib/queries";
+import { channelLabels, type Channel } from "@/lib/types";
 
 function formatRelative(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
@@ -26,7 +18,16 @@ function formatRelative(iso: string): string {
   return `${days}d ago`;
 }
 
-export default function CommandCenterPage() {
+export default async function CommandCenterPage() {
+  const [campaigns, leads, outreachLogs, dailySends, sequences] = await Promise.all([
+    getCampaigns(),
+    getLeads(),
+    getOutreachLogs(200),
+    getDailySends(14),
+    getSequences(),
+  ]);
+  const leadById = new Map(leads.map((l) => [l.id, l]));
+
   const totalSent = campaigns.reduce((n, c) => n + c.stats.sent, 0);
   const totalReplied = campaigns.reduce((n, c) => n + c.stats.replied, 0);
   const totalBooked = campaigns.reduce((n, c) => n + c.stats.booked, 0);
@@ -40,9 +41,9 @@ export default function CommandCenterPage() {
     },
     { email: 0, linkedin: 0, facebook: 0, instagram: 0 }
   );
-  const maxChannel = Math.max(...Object.values(channelCounts));
+  const maxChannel = Math.max(1, ...Object.values(channelCounts));
 
-  const maxDaily = Math.max(...dailySends.map((d) => d.email + d.dm));
+  const maxDaily = Math.max(1, ...dailySends.map((d) => d.email + d.dm));
   const recentLogs = outreachLogs.slice(0, 7);
 
   return (
@@ -165,8 +166,13 @@ export default function CommandCenterPage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col gap-1">
+            {campaigns.length === 0 && (
+              <p className="px-2 py-4 text-sm text-muted-foreground">
+                No campaigns yet — create one from the Campaigns page.
+              </p>
+            )}
             {campaigns.map((c, i) => {
-              const seq = getSequence(c.sequenceId);
+              const seq = sequences.find((s) => s.id === c.sequenceId);
               const rate = c.stats.sent
                 ? Math.round((c.stats.replied / c.stats.sent) * 100)
                 : 0;
@@ -211,8 +217,11 @@ export default function CommandCenterPage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col gap-3.5">
+            {recentLogs.length === 0 && (
+              <p className="text-sm text-muted-foreground">No outreach activity yet.</p>
+            )}
             {recentLogs.map((log) => {
-              const lead = getLead(log.leadId);
+              const lead = leadById.get(log.leadId);
               return (
                 <Link
                   key={log.id}

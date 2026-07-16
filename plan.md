@@ -77,6 +77,8 @@ Supabase (Postgres + Auth + Storage)
 - Vercel project setup
 
 ### Phase 2: Lead Generation
+> **Superseded by the [Lead Sourcing Front Door](../lead-sourcing-front-door.md).** Lead sourcing is now centralized company-wide in one n8n front-door workflow that scrapes multi-source, dedupes globally, and fans the outreach-bound leads into this system's `lead_gen` schema. The Apify-wrapper-in-the-app approach below is retained only as historical context.
+
 - Apify API wrapper service (`/lib/apify.ts`)
   - Google Maps actor: `compass/crawler-google-places` — input: query string, location
   - LinkedIn actor: `harvestapi/linkedin-profile-search` — input: job title, company, location

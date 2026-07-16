@@ -1,5 +1,8 @@
 import { AppSidebar } from "@/components/app-sidebar";
 
+// All dashboard data comes from Supabase at request time.
+export const dynamic = "force-dynamic";
+
 export default function DashboardLayout({
   children,
 }: {

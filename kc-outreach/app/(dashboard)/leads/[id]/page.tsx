@@ -1,39 +1,22 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import {
-  ArrowLeft,
-  Mail,
-  Phone,
-  MapPin,
-  Globe,
-  Sparkles,
-  Wand2,
-  Megaphone,
-  RefreshCw,
-} from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { ArrowLeft, Mail, Phone, MapPin, Globe, Sparkles } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { PageHeader } from "@/components/page-header";
 import { ChannelIcon } from "@/components/channel-icon";
 import { LeadStatusBadge, TouchStatusBadge } from "@/components/status-badge";
+import { getCampaigns, getLeadDetail } from "@/lib/queries";
+import { channelLabels, sourceLabels, type Channel } from "@/lib/types";
 import {
-  channelLabels,
-  getCampaignsForLead,
-  getCopyForLead,
-  getLead,
-  getLogsForLead,
-  getSegment,
-  sourceLabels,
-  type Channel,
-} from "@/lib/data";
+  AddToCampaignDialog,
+  EnrichButton,
+  GenerateAllCopyButton,
+  GenerateChannelCopyButton,
+  LeadStatusSelect,
+} from "./lead-actions";
 
 function initials(name: string): string {
   return name
@@ -61,12 +44,13 @@ export default async function LeadDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const lead = getLead(id);
-  if (!lead) notFound();
+  const [detail, allCampaigns] = await Promise.all([getLeadDetail(id), getCampaigns()]);
+  if (!detail) notFound();
+  const { lead, logs, copy: copies, campaigns: leadCampaigns, segment } = detail;
 
-  const logs = getLogsForLead(lead.id);
-  const copies = getCopyForLead(lead.id);
-  const leadCampaigns = getCampaignsForLead(lead.id);
+  const joinableCampaigns = allCampaigns
+    .filter((c) => c.status !== "completed" && !leadCampaigns.some((lc) => lc.id === c.id))
+    .map((c) => ({ id: c.id, name: c.name }));
 
   return (
     <>
@@ -84,18 +68,10 @@ export default async function LeadDetailPage({
         description={`${lead.title} · ${lead.location}`}
         actions={
           <>
-            <Button variant="outline">
-              <Sparkles data-icon="inline-start" />
-              {lead.enrichment ? "Re-enrich" : "Enrich"}
-            </Button>
-            <Button variant="outline">
-              <Megaphone data-icon="inline-start" />
-              Add to Campaign
-            </Button>
-            <Button>
-              <Wand2 data-icon="inline-start" />
-              Generate Copy
-            </Button>
+            <LeadStatusSelect leadId={lead.id} status={lead.status} />
+            <EnrichButton leadId={lead.id} enriched={Boolean(lead.enrichment)} />
+            <AddToCampaignDialog leadId={lead.id} campaigns={joinableCampaigns} />
+            <GenerateAllCopyButton leadId={lead.id} />
           </>
         }
       />
@@ -113,12 +89,14 @@ export default async function LeadDetailPage({
                 <div>
                   <div className="flex flex-wrap gap-1.5">
                     <LeadStatusBadge status={lead.status} />
-                    <Badge
-                      variant="outline"
-                      className="border-gold/20 bg-gold/5 font-normal text-gold/80"
-                    >
-                      {getSegment(lead.segmentId)?.name}
-                    </Badge>
+                    {segment && (
+                      <Badge
+                        variant="outline"
+                        className="border-gold/20 bg-gold/5 font-normal text-gold/80"
+                      >
+                        {segment.name}
+                      </Badge>
+                    )}
                   </div>
                   <div className="pt-1.5 text-xs text-muted-foreground">
                     Source: {sourceLabels[lead.source]}
@@ -197,17 +175,17 @@ export default async function LeadDetailPage({
                   <div className="grid grid-cols-2 gap-3 text-xs">
                     <div>
                       <div className="text-muted-foreground">Industry</div>
-                      <div className="pt-0.5 text-foreground">{lead.enrichment.industry}</div>
+                      <div className="pt-0.5 text-foreground">{lead.enrichment.industry || "—"}</div>
                     </div>
                     <div>
                       <div className="text-muted-foreground">Size</div>
-                      <div className="pt-0.5 text-foreground">{lead.enrichment.companySize}</div>
+                      <div className="pt-0.5 text-foreground">{lead.enrichment.companySize || "—"}</div>
                     </div>
                     <div className="col-span-2">
                       <div className="text-muted-foreground">Website</div>
                       <div className="flex items-center gap-1.5 pt-0.5 font-mono text-foreground">
                         <Globe className="size-3 text-muted-foreground" />
-                        {lead.enrichment.website}
+                        {lead.enrichment.website || "—"}
                       </div>
                     </div>
                   </div>
@@ -232,10 +210,7 @@ export default async function LeadDetailPage({
                     Not enriched yet. Run Exa AI enrichment to pull company
                     context and buying signals.
                   </p>
-                  <Button variant="outline" size="sm">
-                    <Sparkles data-icon="inline-start" />
-                    Enrich Now
-                  </Button>
+                  <EnrichButton leadId={lead.id} enriched={false} size="sm" />
                 </div>
               )}
             </CardContent>
@@ -287,10 +262,7 @@ export default async function LeadDetailPage({
                               <span className="text-xs text-muted-foreground">
                                 Generated {formatDate(copy.generatedAt)} · Claude
                               </span>
-                              <Button variant="outline" size="sm">
-                                <RefreshCw data-icon="inline-start" />
-                                Regenerate
-                              </Button>
+                              <GenerateChannelCopyButton leadId={lead.id} channel={ch} regenerate />
                             </div>
                           </div>
                         ) : (
@@ -298,10 +270,7 @@ export default async function LeadDetailPage({
                             <p className="text-sm text-muted-foreground">
                               No {channelLabels[ch]} copy generated for this lead yet.
                             </p>
-                            <Button size="sm">
-                              <Wand2 data-icon="inline-start" />
-                              Generate {channelLabels[ch]} Copy
-                            </Button>
+                            <GenerateChannelCopyButton leadId={lead.id} channel={ch} />
                           </div>
                         )}
                       </TabsContent>

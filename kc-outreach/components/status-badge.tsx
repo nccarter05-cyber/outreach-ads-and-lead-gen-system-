@@ -5,7 +5,7 @@ import {
   type CampaignStatus,
   type LeadStatus,
   type TouchStatus,
-} from "@/lib/data";
+} from "@/lib/types";
 
 const leadStyles: Record<LeadStatus, string> = {
   new: "bg-secondary text-secondary-foreground",
@@ -54,10 +54,22 @@ export function CampaignStatusBadge({
 
 const touchStyles: Record<TouchStatus, string> = {
   scheduled: "bg-secondary text-muted-foreground",
+  pending_integration: "bg-amber-400/10 text-amber-300 border-amber-400/20",
   sent: "bg-sky-400/10 text-sky-300 border-sky-400/20",
   opened: "bg-teal-400/10 text-teal-300 border-teal-400/20",
   replied: "bg-emerald-400/10 text-emerald-300 border-emerald-400/25",
   failed: "bg-destructive/10 text-destructive/90 border-destructive/20",
+  skipped: "bg-secondary text-muted-foreground/70",
+};
+
+const touchLabels: Record<TouchStatus, string> = {
+  scheduled: "Scheduled",
+  pending_integration: "Pending key",
+  sent: "Sent",
+  opened: "Opened",
+  replied: "Replied",
+  failed: "Failed",
+  skipped: "Skipped",
 };
 
 export function TouchStatusBadge({
@@ -69,7 +81,7 @@ export function TouchStatusBadge({
 }) {
   return (
     <Badge variant="outline" className={cn(touchStyles[status], className)}>
-      {status.charAt(0).toUpperCase() + status.slice(1)}
+      {touchLabels[status]}
     </Badge>
   );
 }

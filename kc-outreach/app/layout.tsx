@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Marcellus, Instrument_Sans, IBM_Plex_Mono } from "next/font/google";
+import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
 
 const marcellus = Marcellus({
@@ -34,7 +35,10 @@ export default function RootLayout({
       lang="en"
       className={`${marcellus.variable} ${instrumentSans.variable} ${plexMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        {children}
+        <Toaster />
+      </body>
     </html>
   );
 }
