@@ -135,6 +135,19 @@ Supabase (Postgres + Auth + Storage)
 - Channel breakdown: emails sent vs DMs sent per channel
 - Feed-ready data structure for future KC Dashboard API connection
 
+### Phase 8: Organic Social Posting *(Meta + LinkedIn — DM automation on hold in favor of this)*
+> The "ads" half of this system's name was never actually scoped until now. This phase covers **organic** posting only (no spend/targeting) — paid ad campaigns are a separate, later phase. Posts serve two purposes: feed new leads into the funnel, and give a standalone view of post performance.
+
+- **Schema** (`outreach` schema, new migration): `social_accounts` (one row per connected Facebook Page / IG Business account / LinkedIn Company Page — platform, external id, OAuth tokens, status); `social_posts` (platform, status, content, link, `tracking_code`, landing copy, target `segment_id`, schedule/publish timestamps, external post id, flat metric columns — impressions/likes/comments/shares/clicks); `leads` gains `source_post_id` and a new `'social'` source value.
+- **Platform wrappers** — `/lib/meta.ts` (Graph API: publish to FB Page + IG Business two-step publish, fetch insights) and `/lib/linkedin.ts` (UGC Posts API, fetch analytics), both built the same shape as `/lib/instantly.ts` (`isConfigured()` / degrade gracefully rather than error).
+  - **LinkedIn caveat:** organic posting requires LinkedIn's Community Management API, which is partner-approval-gated (not self-serve like Meta's developer app, no guaranteed timeline). Decision: build LinkedIn through the identical code path as Meta, but it stays inactive (posts save as drafts, never auto-publish) until real API access is confirmed and connected — mirrors how Instantly sends degrade to `pending_integration` when unconfigured today.
+- **OAuth connect** — `/app/api/oauth/meta/callback/route.ts`, `/app/api/oauth/linkedin/callback/route.ts`; new env vars `META_APP_ID`, `META_APP_SECRET`, `LINKEDIN_CLIENT_ID`, `LINKEDIN_CLIENT_SECRET`.
+- **Copy generation** — `generateSocialCopy()` added to `/lib/claude.ts`, reusing the King Circle AI system prompt with per-platform tone/length rules.
+- **Scheduler** — `/lib/social-processor.ts` (`runSocialPublishTick()`) publishes due scheduled posts and refreshes metrics for recently published ones; `/app/api/cron/social/route.ts` mirrors the existing outreach cron route; manual "Publish due posts" button mirrors "Run scheduler."
+- **Funnel attribution** — public landing route `/app/lp/[code]/page.tsx` (per-post `tracking_code`, no dashboard chrome) with a lead-capture form; submitting inserts into `leads` with `source='social'` and `source_post_id` set, so captured leads flow into the existing Leads list/segments/sequences unchanged.
+- **UI** — `/app/(dashboard)/social/page.tsx` (composer + posts table, same `page.tsx`/`-client.tsx`/server-action pattern as Sequences/Campaigns) and a standalone `/app/(dashboard)/social/performance/page.tsx` analytics page (same layout pattern as the Command Center: stat row + channel breakdown, no new charting library).
+- **v1 scope cut:** no image/media upload (no Storage pipeline exists yet, and LinkedIn's image flow needs a separate asset-registration step) — text + link posts only; add image support as a fast-follow if needed.
+
 ---
 
 ## Key Files to Create
@@ -154,6 +167,15 @@ Supabase (Postgres + Auth + Storage)
 | `/app/api/webhooks/apify/route.ts` | Receive Apify dataset results |
 | `/app/api/cron/outreach/route.ts` | Sequence step scheduler |
 | `/supabase/migrations/` | All schema migrations |
+| `/lib/meta.ts` | Meta Graph API — publish + insights (Facebook/Instagram) |
+| `/lib/linkedin.ts` | LinkedIn UGC Posts API — publish + analytics (gated on partner approval) |
+| `/app/api/oauth/meta/callback/route.ts` | Meta OAuth token exchange |
+| `/app/api/oauth/linkedin/callback/route.ts` | LinkedIn OAuth token exchange |
+| `/lib/social-processor.ts` | Social post scheduler tick |
+| `/app/api/cron/social/route.ts` | Social post scheduler cron |
+| `/app/(dashboard)/social/page.tsx` | Post composer + posts table |
+| `/app/(dashboard)/social/performance/page.tsx` | Standalone post-performance analytics |
+| `/app/lp/[code]/page.tsx` | Public lead-capture landing page per post |
 
 ---
 
@@ -166,6 +188,9 @@ Supabase (Postgres + Auth + Storage)
 6. Playwright DM runner navigates to profile and sends message (test in staging with real account)
 7. Cron job fires on schedule and processes due steps
 8. Analytics page reflects accurate counts from `outreach_logs`
+9. Meta OAuth connects a real Page/IG account and `runSocialPublishTick()` publishes a real post, storing `external_post_id`
+10. LinkedIn posts save as drafts (never auto-publish) until real API access is connected — verify no errors when unconfigured
+11. Submitting `/app/lp/[code]` creates a `leads` row with `source='social'` and correct `source_post_id`, visible in the Leads list and the social performance page's attribution count
 
 ---
 
@@ -177,15 +202,18 @@ Supabase (Postgres + Auth + Storage)
 | Lead enrichment | KC Dashboard pipeline connection |
 | Claude copy generation | SaaS / multi-tenant features |
 | Visual sequence builder | Mobile app |
-| Email outreach (Instantly.ai) | |
-| DM outreach (Playwright automation) | |
+| Email outreach (Instantly.ai) | Paid social ads (spend/targeting) — later phase |
+| Organic social posting (Meta + LinkedIn) | |
 | Analytics dashboard | |
+
+DM outreach (Playwright automation) is on hold — deprioritized in favor of Phase 8 (organic social posting) per current direction; still in-scope long-term, just not being built next.
 
 ### Locked Decisions
 - Email provider: **Instantly.ai**
 - Scraping: Apify primary, Exa AI secondary, Playwright custom as-needed
 - Phantombuster: demoted — too risky for DM automation; optional future consideration only
-- DM automation: Playwright server-side, using stored session cookies (ToS risk acknowledged)
+- DM automation: Playwright server-side, using stored session cookies (ToS risk acknowledged) — **on hold**, resumes after Phase 8
+- Social posting: Meta built first (self-serve developer app); LinkedIn wired through the identical code path but gated inactive until Community Management API access is confirmed; no image/media upload in v1
 
 ---
 
@@ -196,3 +224,5 @@ Supabase (Postgres + Auth + Storage)
 2. **Playwright DM reliability** — Browser automation for cold DMs is fragile (CAPTCHAs, UI changes, account flags per channel). Each channel needs separate session management. Budget for ongoing maintenance.
 
 3. **Scheduling frequency** — Vercel Cron free tier: 1 job/day; Pro: 60/day. If higher frequency is needed (hour-level precision), use **Supabase pg_cron** or **Inngest** for event-driven job queuing. Worth locking in before Phase 6.
+
+4. **LinkedIn API access is unconfirmed** — as of starting Phase 8, it's unknown whether King Circle AI has (or can get) LinkedIn Community Management API access for organic posting; unlike Meta this isn't a self-serve developer-app process, it requires LinkedIn's partner approval with no guaranteed timeline. Needs to be checked/applied for early in Phase 8 — Meta posting can ship and be used independently in the meantime.
