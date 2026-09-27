@@ -126,7 +126,7 @@ Supabase (Postgres + Auth + Storage)
   - Rate limiting: human-like delays between sends (configurable)
   - Log result (success/fail) to `outreach_logs`
 - **Outreach Scheduler**:
-  - Vercel Cron Job (or Supabase pg_cron) to process due sequence steps daily
+  - n8n schedule trigger calls `/api/cron/outreach` hourly, authenticated with `Authorization: Bearer $CRON_SECRET`
   - Query: sequence_steps where delay_days reached → trigger outreach for pending campaign_leads
 
 ### Phase 7: Analytics & Dashboard Home *(depends on Phase 6)*
@@ -143,7 +143,7 @@ Supabase (Postgres + Auth + Storage)
   - **LinkedIn caveat:** organic posting requires LinkedIn's Community Management API, which is partner-approval-gated (not self-serve like Meta's developer app, no guaranteed timeline). Decision: build LinkedIn through the identical code path as Meta, but it stays inactive (posts save as drafts, never auto-publish) until real API access is confirmed and connected — mirrors how Instantly sends degrade to `pending_integration` when unconfigured today.
 - **OAuth connect** — `/app/api/oauth/meta/callback/route.ts`, `/app/api/oauth/linkedin/callback/route.ts`; new env vars `META_APP_ID`, `META_APP_SECRET`, `LINKEDIN_CLIENT_ID`, `LINKEDIN_CLIENT_SECRET`.
 - **Copy generation** — `generateSocialCopy()` added to `/lib/claude.ts`, reusing the King Circle AI system prompt with per-platform tone/length rules.
-- **Scheduler** — `/lib/social-processor.ts` (`runSocialPublishTick()`) publishes due scheduled posts and refreshes metrics for recently published ones; `/app/api/cron/social/route.ts` mirrors the existing outreach cron route; manual "Publish due posts" button mirrors "Run scheduler."
+- **Scheduler** — `/lib/social-processor.ts` (`runSocialPublishTick()`) publishes due scheduled posts and refreshes metrics for recently published ones; `/app/api/cron/social/route.ts` mirrors the existing outreach cron route (same `CRON_SECRET` bearer check, driven by a second n8n schedule node); manual "Publish due posts" button mirrors "Run scheduler."
 - **Funnel attribution** — public landing route `/app/lp/[code]/page.tsx` (per-post `tracking_code`, no dashboard chrome) with a lead-capture form; submitting inserts into `leads` with `source='social'` and `source_post_id` set, so captured leads flow into the existing Leads list/segments/sequences unchanged.
 - **UI** — `/app/(dashboard)/social/page.tsx` (composer + posts table, same `page.tsx`/`-client.tsx`/server-action pattern as Sequences/Campaigns) and a standalone `/app/(dashboard)/social/performance/page.tsx` analytics page (same layout pattern as the Command Center: stat row + channel breakdown, no new charting library).
 - **v1 scope cut:** no image/media upload (no Storage pipeline exists yet, and LinkedIn's image flow needs a separate asset-registration step) — text + link posts only; add image support as a fast-follow if needed.
@@ -186,7 +186,7 @@ Supabase (Postgres + Auth + Storage)
 4. Sequence builder saves steps, delays, and channel assignments correctly
 5. Instantly.ai email send triggers and logs in `outreach_logs`
 6. Playwright DM runner navigates to profile and sends message (test in staging with real account)
-7. Cron job fires on schedule and processes due steps
+7. n8n hourly trigger reaches `/api/cron/outreach`, authenticates, and processes due steps
 8. Analytics page reflects accurate counts from `outreach_logs`
 9. Meta OAuth connects a real Page/IG account and `runSocialPublishTick()` publishes a real post, storing `external_post_id`
 10. LinkedIn posts save as drafts (never auto-publish) until real API access is connected — verify no errors when unconfigured
@@ -213,6 +213,7 @@ DM outreach (Playwright automation) is on hold — deprioritized in favor of Pha
 - Scraping: Apify primary, Exa AI secondary, Playwright custom as-needed
 - Phantombuster: demoted — too risky for DM automation; optional future consideration only
 - DM automation: Playwright server-side, using stored session cookies (ToS risk acknowledged) — **on hold**, resumes after Phase 8
+- Scheduling: **n8n schedule trigger** hitting `/api/cron/outreach` hourly with a `CRON_SECRET` bearer token — not Vercel Cron (Hobby is daily-only and fails deployment on finer schedules)
 - Social posting: Meta built first (self-serve developer app); LinkedIn wired through the identical code path but gated inactive until Community Management API access is confirmed; no image/media upload in v1
 
 ---
@@ -223,6 +224,6 @@ DM outreach (Playwright automation) is on hold — deprioritized in favor of Pha
 
 2. **Playwright DM reliability** — Browser automation for cold DMs is fragile (CAPTCHAs, UI changes, account flags per channel). Each channel needs separate session management. Budget for ongoing maintenance.
 
-3. **Scheduling frequency** — Vercel Cron free tier: 1 job/day; Pro: 60/day. If higher frequency is needed (hour-level precision), use **Supabase pg_cron** or **Inngest** for event-driven job queuing. Worth locking in before Phase 6.
+3. **Scheduling frequency** — ~~open~~ **decided: n8n drives it.** Vercel Cron on Hobby is limited to one run per day and *fails deployment* on any finer expression, but campaign send windows need hourly ticks. Since n8n already runs the lead front door, a schedule node there calls `/api/cron/outreach` hourly with `Authorization: Bearer $CRON_SECRET`. No `vercel.json` cron block exists. Supabase pg_cron and Inngest are no longer needed.
 
 4. **LinkedIn API access is unconfirmed** — as of starting Phase 8, it's unknown whether King Circle AI has (or can get) LinkedIn Community Management API access for organic posting; unlike Meta this isn't a self-serve developer-app process, it requires LinkedIn's partner approval with no guaranteed timeline. Needs to be checked/applied for early in Phase 8 — Meta posting can ship and be used independently in the meantime.

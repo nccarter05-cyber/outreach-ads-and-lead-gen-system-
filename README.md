@@ -95,7 +95,7 @@ npm run lint    # eslint
 - **Playwright must run server-side** (Node.js) — never in the browser or Supabase Edge Functions
 - **Apify runs are async** (minutes to hours) — trigger, then poll or receive a webhook
 - **Official Meta/LinkedIn APIs do not support cold DMs** — DM automation uses Playwright with stored session cookies (ToS risk acknowledged; internal use only)
-- **Scheduler:** Vercel Cron free tier is 1 run/day; hour-level follow-up timing will need Supabase pg_cron or Inngest
+- **Scheduler:** an n8n schedule trigger calls `/api/cron/outreach` hourly (Vercel Cron on Hobby caps at 1 run/day and fails deployment on anything finer)
 
 ## Scope
 
