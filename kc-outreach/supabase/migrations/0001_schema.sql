@@ -173,6 +173,7 @@ grant usage on schema outreach to anon, authenticated, service_role;
 grant all on all tables in schema outreach to service_role;
 alter default privileges in schema outreach grant all on tables to service_role;
 
--- Also applied (separately, matching the existing cold_call schema pattern):
+-- Also applied (separately, matching the existing cold_call schema pattern).
+-- The list is shared by every app on kc-backend: always append, never replace.
 --   alter role authenticator set pgrst.db_schemas = 'public, graphql_public, cold_call, outreach';
 --   notify pgrst, 'reload config';
