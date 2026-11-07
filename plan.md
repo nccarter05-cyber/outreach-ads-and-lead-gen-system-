@@ -146,7 +146,42 @@ Supabase (Postgres + Auth + Storage)
 - **Scheduler** — `/lib/social-processor.ts` (`runSocialPublishTick()`) publishes due scheduled posts and refreshes metrics for recently published ones; `/app/api/cron/social/route.ts` mirrors the existing outreach cron route (same `CRON_SECRET` bearer check, driven by a second n8n schedule node); manual "Publish due posts" button mirrors "Run scheduler."
 - **Funnel attribution** — public landing route `/app/lp/[code]/page.tsx` (per-post `tracking_code`, no dashboard chrome) with a lead-capture form; submitting inserts into `leads` with `source='social'` and `source_post_id` set, so captured leads flow into the existing Leads list/segments/sequences unchanged.
 - **UI** — `/app/(dashboard)/social/page.tsx` (composer + posts table, same `page.tsx`/`-client.tsx`/server-action pattern as Sequences/Campaigns) and a standalone `/app/(dashboard)/social/performance/page.tsx` analytics page (same layout pattern as the Command Center: stat row + channel breakdown, no new charting library).
-- **v1 scope cut:** no image/media upload (no Storage pipeline exists yet, and LinkedIn's image flow needs a separate asset-registration step) — text + link posts only; add image support as a fast-follow if needed.
+- **v1 scope cut:** no image/media upload (no Storage pipeline exists yet, and LinkedIn's image flow needs a separate asset-registration step) — text + link posts only; image support is the Phase 8.1 fast-follow below.
+
+### Phase 8.1: Social Post Images *(fast-follow, depends on Phase 8)*
+- **Storage** — Supabase Storage bucket `social-media`, public read (Meta fetches media by public URL; IG requires `image_url`). Composer uploads via a signed upload URL issued by a server action.
+- **Schema** — `social_post_media` (post_id, storage_path, public_url, mime, width, height, sort_order).
+- **Validation** — JPEG/PNG, ≤8MB, IG aspect ratio 4:5 – 1.91:1; reject in the composer before save.
+- **`/lib/meta.ts`** — Facebook: `/{page}/photos` with the image URL; Instagram: image container → publish (same two-step flow as text). Carousel deferred.
+- **`/lib/linkedin.ts`** — `registerUpload` → binary upload → asset URN on the post; stays gated with the rest of LinkedIn.
+
+### Phase 9: Reply Inbox + CRM Pipeline *(depends on Phase 6; Phase 8 landing pages feed it)*
+> Today the Instantly webhook only flips statuses to `replied` — reply text is never stored and nothing tracks what happens after a reply. This phase adds a unified inbox and a native deal pipeline (no HubSpot — kept in the `outreach` schema so agents can read/write it directly).
+
+- **Schema** (`outreach` schema, new migration):
+  - `messages` — id, lead_id, campaign_lead_id, channel, direction (`inbound`|`outbound`), subject, body, external_id, thread_key, received_at/sent_at, read_at, classification, ai_draft
+  - `deals` — id, lead_id (one open deal per lead), stage enum (`new_reply`|`qualified`|`meeting_booked`|`proposal`|`won`|`lost`), value, owner_email, next_step, next_step_at, lost_reason, stage_changed_at
+  - `deal_events` — stage-change audit trail
+  - `suppressions` — email/domain, reason, created_at; checked before every send (processor + agents)
+- **Ingest** — `reply_received` in `/app/api/webhooks/instantly/route.ts` also inserts an inbound `messages` row with the reply body; Phase 8 landing-page submissions create inbound `messages` with channel `web`.
+- **Reply out** — `sendReply()` in `/lib/instantly.ts` (Instantly v2 reply endpoint), same `isConfigured()` / `pending_integration` degrade pattern.
+- **Status sync** — first inbound reply auto-creates a deal in `new_reply`; `meeting_booked` → lead `booked`; `lost` → lead `not_interested`.
+- **UI** — `/app/(dashboard)/inbox/` (thread list with unread/hot filters, thread view, reply composer with "AI draft" reusing the `/lib/claude.ts` system prompt) and `/app/(dashboard)/pipeline/` (Kanban by stage + deal sheet). Same `page.tsx`/`-client.tsx`/server-action pattern; both added to the sidebar. Command Center gains pipeline value + meetings booked from `deals`.
+
+### Phase 10: GTM Agents *(depends on Phase 9)*
+> Autonomous agents that run the GTM workflow end to end — prospect research, personalized outreach, reply qualification/routing, and campaign analysis — as 24/7 digital workers coordinated by an orchestrator. They **start approve-first**: agents research, draft, and qualify on their own, but outbound actions wait in an approval queue until autonomy is raised per agent.
+
+- **Orchestrator** — deterministic code, not an LLM: `/lib/agents/orchestrator.ts` `runAgentTick()`, driven by `/app/api/cron/agents/route.ts` (same `CRON_SECRET` bearer check as the outreach cron, a third n8n schedule node). Each tick drains work queues — new leads needing research, scored leads needing outreach, unprocessed inbound messages, weekly analysis — and enforces each agent's enabled flag, autonomy level, daily caps, and token budget. The Instantly webhook also triggers the Qualification agent immediately rather than waiting for the tick.
+- **Agent runtime** — each agent in `/lib/agents/*.ts` is a Claude tool-use loop (Anthropic SDK) over narrow tools that wrap existing code: `enrichLead` (`/lib/exa.ts`), `generateEmailCopy` / `generateCallScript` (`/lib/claude.ts`), `addLeadToCampaign` (`/app/actions/campaigns.ts`), `sendReply`, deal-stage mutations.
+- **Schema** — `agents` (key, enabled, autonomy `suggest`|`approve`|`auto` — default `approve`, config jsonb, daily caps); `agent_runs` (agent, trigger, status, input/output, tokens, cost, timestamps); `agent_actions` (run_id, type, payload, status `proposed`|`approved`|`rejected`|`executed`|`failed`, reviewed_at, executed_at — `proposed` rows are the approval queue); `agent_reports`; `leads` gains `fit_score`, `intent_signals` (jsonb), `priority`.
+- **Agents:**
+  1. **Research / Prospecting** — enriches new leads, detects buying signals (hiring, reviews, running ads, tech stack, recent news), scores fit against the segment playbook, re-segments if needed. Optionally proposes new scrape queries to the n8n Lead Sourcing Front Door via webhook.
+  2. **Outreach / Personalization** — for leads above the score threshold: picks sequence + campaign, pre-generates per-step copy into `ai_copy_cache`, proposes enrollment. Actual sends stay with `runOutreachTick()`.
+  3. **Qualification & Routing** — on every inbound message: classifies (interested / question / objection / not now / OOO / wrong person / unsubscribe), scores qualification, drafts a reply, creates/moves the deal. **Hot leads** are routed to: the inbox (flagged hot) + pipeline stage, an **email alert** (n8n webhook `N8N_NOTIFY_WEBHOOK_URL` — no new email vendor), and the **top of the Call List** with a fresh call script. Unsubscribe (stop sequences + add to `suppressions`) and OOO (reschedule next step) always auto-execute, even in approve mode.
+  4. **Analyst / Optimizer** — weekly: reads `outreach_logs`, `deals`, and social metrics; writes a report with a stage-weighted pipeline forecast; proposes changes (pause a weak step, A/B a copy variant, shift a send window).
+- **UI** — `/app/(dashboard)/agents/`: agent cards (enable, autonomy, caps, last run), **approval queue** (approve / edit-then-approve / reject, bulk actions), run log with token cost, reports tab.
+- **Guardrails** — global kill switch; daily token/cost budget; agent caps layered under existing campaign send caps; every action logged; suppression list checked before any send; autonomy raised one agent at a time.
+- **Build order** — Qualification first (needs Phase 9), then Research, Outreach, Analyst.
 
 ---
 
@@ -176,6 +211,15 @@ Supabase (Postgres + Auth + Storage)
 | `/app/(dashboard)/social/page.tsx` | Post composer + posts table |
 | `/app/(dashboard)/social/performance/page.tsx` | Standalone post-performance analytics |
 | `/app/lp/[code]/page.tsx` | Public lead-capture landing page per post |
+| `/app/(dashboard)/inbox/page.tsx` | Unified reply inbox + AI-drafted replies |
+| `/app/(dashboard)/pipeline/page.tsx` | Deal pipeline Kanban |
+| `/app/(dashboard)/agents/page.tsx` | Agent controls, approval queue, run log, reports |
+| `/lib/agents/orchestrator.ts` | `runAgentTick()` — work queues, caps, autonomy enforcement |
+| `/lib/agents/research.ts` | Research / Prospecting agent |
+| `/lib/agents/outreach.ts` | Outreach / Personalization agent |
+| `/lib/agents/qualify.ts` | Qualification & Routing agent |
+| `/lib/agents/analyst.ts` | Analyst / Optimizer agent |
+| `/app/api/cron/agents/route.ts` | Agent orchestrator cron (n8n-driven) |
 
 ---
 
@@ -191,6 +235,13 @@ Supabase (Postgres + Auth + Storage)
 9. Meta OAuth connects a real Page/IG account and `runSocialPublishTick()` publishes a real post, storing `external_post_id`
 10. LinkedIn posts save as drafts (never auto-publish) until real API access is connected — verify no errors when unconfigured
 11. Submitting `/app/lp/[code]` creates a `leads` row with `source='social'` and correct `source_post_id`, visible in the Leads list and the social performance page's attribution count
+12. An image post publishes to a real FB Page and IG account from the `social-media` bucket's public URL
+13. An Instantly reply lands in `/inbox` with its body text, auto-creates a `new_reply` deal, and a reply sent from the inbox logs an outbound `messages` row
+14. Moving a deal to `meeting_booked` sets the lead to `booked`; `lost` sets `not_interested`
+15. In `approve` mode, an agent's outbound action sits in the approval queue as `proposed` and does not execute until approved
+16. An "unsubscribe" reply auto-stops all sequences and adds a `suppressions` row, and the processor skips that contact afterward
+17. A hot reply triggers the n8n email alert, moves the deal, and puts the lead at the top of the Call List with a fresh script
+18. The kill switch and daily token budget halt `runAgentTick()` cleanly
 
 ---
 
@@ -203,8 +254,10 @@ Supabase (Postgres + Auth + Storage)
 | Claude copy generation | SaaS / multi-tenant features |
 | Visual sequence builder | Mobile app |
 | Email outreach (Instantly.ai) | Paid social ads (spend/targeting) — later phase |
-| Organic social posting (Meta + LinkedIn) | |
+| Organic social posting (Meta + LinkedIn), incl. images | HubSpot / external CRM sync |
 | Analytics dashboard | |
+| Reply inbox + native CRM pipeline | |
+| GTM agents (research, outreach, qualification, analyst) | |
 
 DM outreach (Playwright automation) is on hold — deprioritized in favor of Phase 8 (organic social posting) per current direction; still in-scope long-term, just not being built next.
 
@@ -214,7 +267,10 @@ DM outreach (Playwright automation) is on hold — deprioritized in favor of Pha
 - Phantombuster: demoted — too risky for DM automation; optional future consideration only
 - DM automation: Playwright server-side, using stored session cookies (ToS risk acknowledged) — **on hold**, resumes after Phase 8
 - Scheduling: **n8n schedule trigger** hitting `/api/cron/outreach` hourly with a `CRON_SECRET` bearer token — not Vercel Cron (Hobby is daily-only and fails deployment on finer schedules)
-- Social posting: Meta built first (self-serve developer app); LinkedIn wired through the identical code path but gated inactive until Community Management API access is confirmed; no image/media upload in v1
+- Social posting: Meta built first (self-serve developer app); LinkedIn wired through the identical code path but gated inactive until Community Management API access is confirmed; images added in Phase 8.1 (not v1)
+- CRM: **native** pipeline in the `outreach` schema — no HubSpot
+- GTM agents: **approve-first** by default, autonomy raised per agent; orchestrator is deterministic code, not an LLM; hot-lead alerts go through an n8n webhook (no new email vendor)
+- Build order after Phase 8: **8.1 → 9 → 10**; DM automation stays on hold
 
 ---
 
