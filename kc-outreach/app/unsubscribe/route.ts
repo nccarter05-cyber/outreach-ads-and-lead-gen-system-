@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { verifyUnsubscribeToken } from "@/lib/compliance";
+import { addSuppression } from "@/lib/suppressions";
 import { supabase } from "@/lib/supabase";
 
 // Public unsubscribe endpoint. GET = human click (confirmation page);
@@ -10,6 +11,8 @@ async function unsubscribe(token: string | null): Promise<boolean> {
   const leadId = token ? verifyUnsubscribeToken(token) : null;
   if (!leadId) return false;
   const db = supabase();
+  const { data: lead } = await db.from("leads").select("email").eq("id", leadId).maybeSingle();
+  await addSuppression(lead?.email, "unsubscribed", leadId);
   await db.from("leads").update({ status: "not_interested" }).eq("id", leadId);
   await db
     .from("campaign_leads")

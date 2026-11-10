@@ -2,6 +2,7 @@ import "server-only";
 import { resolveCopy } from "./copy";
 import { coldBudgetRemaining, dispatchColdEmail, isColdConfigured } from "./email";
 import { mapCampaign, mapLead, mapStep } from "./mappers";
+import { isSuppressed } from "./suppressions";
 import { supabase, unwrap } from "./supabase";
 import type {
   CampaignLeadRow,
@@ -140,6 +141,15 @@ export async function runOutreachTick(now = new Date()): Promise<TickResult> {
         await db
           .from("campaign_leads")
           .update({ status: "stopped", stopped_reason: `lead_status:${lead.status}` })
+          .eq("id", cl.id);
+        result.stopped += 1;
+        continue;
+      }
+
+      if (await isSuppressed(lead.email)) {
+        await db
+          .from("campaign_leads")
+          .update({ status: "stopped", stopped_reason: "suppressed" })
           .eq("id", cl.id);
         result.stopped += 1;
         continue;

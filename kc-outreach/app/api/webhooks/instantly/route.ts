@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { notifyOwner } from "@/lib/email";
+import { addSuppression } from "@/lib/suppressions";
 import { supabase, unwrap } from "@/lib/supabase";
 import type { OutreachLogRow } from "@/lib/types";
 
@@ -102,6 +103,7 @@ export async function POST(request: Request) {
           .update({ status: "stopped", stopped_reason: eventType })
           .eq("lead_id", lead.id)
           .in("status", ["pending", "in_progress"]);
+        await addSuppression(email, eventType === "email_bounced" ? "bounced" : "unsubscribed", lead.id);
         break;
       }
       default:
