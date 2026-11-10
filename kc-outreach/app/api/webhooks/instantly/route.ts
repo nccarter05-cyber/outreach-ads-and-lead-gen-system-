@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { notifyOwner } from "@/lib/email";
 import { supabase, unwrap } from "@/lib/supabase";
 import type { OutreachLogRow } from "@/lib/types";
 
@@ -81,6 +82,11 @@ export async function POST(request: Request) {
           .eq("lead_id", lead.id)
           .in("status", ["pending", "in_progress"]);
         await db.from("leads").update({ status: "replied" }).eq("id", lead.id);
+        // Best-effort alert; never fail the webhook over it.
+        await notifyOwner(
+          `Reply from ${email}`,
+          `${email} replied to your outreach. Open the lead: ${process.env.APP_URL ?? ""}/leads/${lead.id}`,
+        ).catch(() => false);
         break;
       }
       case "email_bounced":

@@ -1,6 +1,6 @@
 import "server-only";
 import { resolveCopy } from "./copy";
-import { dispatchEmail, isConfigured } from "./instantly";
+import { coldBudgetRemaining, dispatchColdEmail, isColdConfigured } from "./email";
 import { mapCampaign, mapLead, mapStep } from "./mappers";
 import { supabase, unwrap } from "./supabase";
 import type {
@@ -14,8 +14,8 @@ import type {
 // The follow-up automation engine. One tick:
 //   for each active campaign, inside its send window, under its daily cap:
 //     advance due campaign_leads to their next sequence step —
-//     skip DM channels (later phase), stop on reply, email via Instantly
-//     (or log pending_integration when no key exists).
+//     skip DM channels (later phase), stop on reply, email via the cold provider (SMTP or Instantly, lib/email.ts)
+//     or log pending_integration when it isn't configured.
 // Invoked by the Vercel cron route and the "Run scheduler" button.
 
 export interface TickResult {
@@ -73,7 +73,9 @@ export async function runOutreachTick(now = new Date()): Promise<TickResult> {
     notes: [],
   };
   const db = supabase();
-  const configured = await isConfigured();
+  const configured = await isColdConfigured();
+  // Mailbox-level cap (SMTP only; Infinity for Instantly), shared across campaigns.
+  let coldBudget = await coldBudgetRemaining(now);
 
   const campaigns = unwrap<CampaignRow[]>(
     await db.from("campaigns").select("*").eq("status", "active"),
@@ -128,6 +130,10 @@ export async function runOutreachTick(now = new Date()): Promise<TickResult> {
 
     for (const cl of due) {
       if (budget <= 0) break;
+      if (configured && coldBudget <= 0) {
+        result.notes.push("mailbox daily cap reached");
+        break;
+      }
       const lead = mapLead(cl.leads, cl.leads.lead_enrichments);
 
       if (STOP_LEAD_STATUSES.has(lead.status)) {
@@ -222,7 +228,7 @@ export async function runOutreachTick(now = new Date()): Promise<TickResult> {
 
       if (configured) {
         try {
-          const dispatch = await dispatchEmail({ campaign, lead, step, copy });
+          const dispatch = await dispatchColdEmail({ campaign, lead, step, copy });
           await db.from("outreach_logs").insert({
             campaign_lead_id: cl.id,
             campaign_id: campaignRow.id,
@@ -246,7 +252,7 @@ export async function runOutreachTick(now = new Date()): Promise<TickResult> {
             status: "failed",
             subject: copy.subject,
             body: copy.body,
-            error: `instantly_dispatch: ${e instanceof Error ? e.message : String(e)}`,
+            error: `email_dispatch: ${e instanceof Error ? e.message : String(e)}`,
           });
           await db
             .from("campaign_leads")
@@ -275,6 +281,7 @@ export async function runOutreachTick(now = new Date()): Promise<TickResult> {
         await db.from("leads").update({ status: "contacted" }).eq("id", lead.id);
       }
       budget -= 1;
+      if (configured) coldBudget -= 1;
     }
   }
 
