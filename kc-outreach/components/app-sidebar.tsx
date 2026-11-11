@@ -9,6 +9,8 @@ import {
   Megaphone,
   ListOrdered,
   Phone,
+  Inbox,
+  Handshake,
   Settings,
   type LucideIcon,
 } from "lucide-react";
@@ -26,6 +28,8 @@ const navItems: NavItem[] = [
   { label: "Audiences", href: "/audiences", icon: Target },
   { label: "Sequences", href: "/sequences", icon: ListOrdered },
   { label: "Campaigns", href: "/campaigns", icon: Megaphone },
+  { label: "Inbox", href: "/inbox", icon: Inbox },
+  { label: "Pipeline", href: "/pipeline", icon: Handshake },
   { label: "Call List", href: "/calls", icon: Phone },
 ];
 

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { notifyOwner } from "@/lib/email";
+import { ingestInbound } from "@/lib/inbox";
 import { addSuppression } from "@/lib/suppressions";
 import { supabase, unwrap } from "@/lib/supabase";
 import type { OutreachLogRow } from "@/lib/types";
@@ -16,6 +16,10 @@ interface InstantlyEvent {
   lead_email?: string;
   email?: string;
   timestamp?: string;
+  email_id?: string;
+  reply_subject?: string;
+  reply_text?: string;
+  reply_body?: string;
 }
 
 export async function POST(request: Request) {
@@ -83,11 +87,14 @@ export async function POST(request: Request) {
           .eq("lead_id", lead.id)
           .in("status", ["pending", "in_progress"]);
         await db.from("leads").update({ status: "replied" }).eq("id", lead.id);
-        // Best-effort alert; never fail the webhook over it.
-        await notifyOwner(
-          `Reply from ${email}`,
-          `${email} replied to your outreach. Open the lead: ${process.env.APP_URL ?? ""}/leads/${lead.id}`,
-        ).catch(() => false);
+        // Store the reply body, open a deal, alert the owner. Never fail the webhook over it.
+        await ingestInbound({
+          email,
+          subject: event.reply_subject ?? "",
+          body: event.reply_text ?? event.reply_body ?? "",
+          externalId: event.email_id ? `instantly:${event.email_id}` : undefined,
+          occurredAt: event.timestamp,
+        }).catch(() => undefined);
         break;
       }
       case "email_bounced":

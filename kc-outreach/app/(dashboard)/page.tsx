@@ -6,7 +6,7 @@ import { PageHeader } from "@/components/page-header";
 import { StatCard } from "@/components/stat-card";
 import { ChannelIcon } from "@/components/channel-icon";
 import { TouchStatusBadge, CampaignStatusBadge } from "@/components/status-badge";
-import { getCampaigns, getDailySends, getLeads, getOutreachLogs, getSequences } from "@/lib/queries";
+import { getCampaigns, getDailySends, getDeals, getLeads, getOutreachLogs, getSequences } from "@/lib/queries";
 import { channelLabels, type Channel } from "@/lib/types";
 
 function formatRelative(iso: string): string {
@@ -19,12 +19,13 @@ function formatRelative(iso: string): string {
 }
 
 export default async function CommandCenterPage() {
-  const [campaigns, leads, outreachLogs, dailySends, sequences] = await Promise.all([
+  const [campaigns, leads, outreachLogs, dailySends, sequences, deals] = await Promise.all([
     getCampaigns(),
     getLeads(),
     getOutreachLogs(200),
     getDailySends(14),
     getSequences(),
+    getDeals(),
   ]);
   const leadById = new Map(leads.map((l) => [l.id, l]));
 
@@ -32,6 +33,9 @@ export default async function CommandCenterPage() {
   const totalReplied = campaigns.reduce((n, c) => n + c.stats.replied, 0);
   const totalBooked = campaigns.reduce((n, c) => n + c.stats.booked, 0);
   const activeCampaigns = campaigns.filter((c) => c.status === "active").length;
+  const openDeals = deals.filter((d) => d.stage !== "won" && d.stage !== "lost");
+  const pipelineValue = openDeals.reduce((n, d) => n + d.value, 0);
+  const meetingsBooked = deals.filter((d) => d.stage === "meeting_booked").length;
   const replyRate = totalSent ? Math.round((totalReplied / totalSent) * 100) : 0;
 
   const channelCounts = outreachLogs.reduce<Record<Channel, number>>(
@@ -72,8 +76,8 @@ export default async function CommandCenterPage() {
         />
         <StatCard
           label="Booked"
-          value={String(totalBooked)}
-          sub="calls on calendar"
+          value={String(Math.max(totalBooked, meetingsBooked))}
+          sub={`${openDeals.length} open deals · $${pipelineValue.toLocaleString("en-US")}`}
           icon={CalendarCheck}
           featured
         />

@@ -31,6 +31,22 @@ curl -i -H "Authorization: Bearer $CRON_SECRET" \
 - `401 {"error":"unauthorized"}` — `CRON_SECRET` is unset in Vercel, or the
   header value doesn't match it exactly (it must include the `Bearer ` prefix).
 
+## Inbox poll (Phase 9)
+
+Replies to SMTP-sent cold email land in the sending mailbox, so a second
+workflow polls it: import `inbox-poll.workflow.json`, replace the domain, reuse
+the same `KC Outreach CRON_SECRET` credential, activate. It calls
+`/api/cron/inbox` every 10 minutes (read-only IMAP over `SMTP_USER`/`SMTP_PASS`;
+override with `IMAP_HOST`/`IMAP_PORT`). Test it with:
+
+```bash
+curl -i -H "Authorization: Bearer $CRON_SECRET" https://<your-domain>/api/cron/inbox
+```
+
+`200 {"ok":true,"result":{"scanned":N,"stored":M}}` means it works. Instantly
+replies don't need this: they arrive via `/api/webhooks/instantly?secret=...`
+(set `INSTANTLY_WEBHOOK_SECRET`).
+
 ## Notes
 
 - The route is idempotent per tick — a duplicate or missed run is safe; the next

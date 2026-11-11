@@ -176,3 +176,34 @@ The script needs: a natural opener (under 30 seconds, references something speci
     4096,
   );
 }
+
+export async function generateReplyDraft(args: {
+  lead: Lead;
+  enrichment?: Enrichment;
+  thread: { direction: "inbound" | "outbound"; body: string }[];
+}): Promise<GeneratedEmail> {
+  const transcript = args.thread
+    .map((m) => `${m.direction === "inbound" ? "LEAD" : "NATE"}: ${m.body}`)
+    .join("\n\n---\n\n");
+  return generateJson<GeneratedEmail>(
+    `Draft a reply to the lead's latest message. Keep it short (under 120 words), answer what they asked, and move toward a quick call if they're interested. If they sound uninterested or ask to stop, reply with a brief polite acknowledgement and do not push.
+
+Lead:
+${leadContext(args.lead, args.enrichment)}
+
+Conversation so far (oldest first):
+${transcript}
+
+Return a subject line (prefix "Re: " if replying to an existing subject) and the reply body.`,
+    {
+      type: "object",
+      properties: {
+        subject: { type: "string", description: "Reply subject line" },
+        body: { type: "string", description: "The reply, ready to send, signed as Nate" },
+      },
+      required: ["subject", "body"],
+      additionalProperties: false,
+    },
+    1024,
+  );
+}

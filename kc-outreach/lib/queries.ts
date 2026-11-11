@@ -16,6 +16,9 @@ import type {
   Campaign,
   CampaignLeadRow,
   CampaignRow,
+  Deal,
+  DealStage,
+  InboxThread,
   Lead,
   LeadEnrichmentRow,
   LeadRow,
@@ -217,4 +220,100 @@ export async function getDailySends(days = 14): Promise<DailySend[]> {
     else bucket.dm += 1;
   }
   return [...buckets.values()];
+}
+
+// ── Phase 9: inbox + pipeline ───────────────────────────────────────────────
+
+export async function getInboxThreads(): Promise<InboxThread[]> {
+  const rows = unwrap<
+    {
+      id: string;
+      lead_id: string;
+      channel: string;
+      direction: "inbound" | "outbound";
+      subject: string;
+      body: string;
+      occurred_at: string;
+      read_at: string | null;
+      classification: string | null;
+      leads: { name: string; company: string; email: string | null };
+    }[]
+  >(
+    await supabase()
+      .from("messages")
+      .select("*, leads(name, company, email)")
+      .order("occurred_at", { ascending: true })
+      .limit(1000),
+  );
+  const deals = unwrap<{ lead_id: string; stage: DealStage }[]>(
+    await supabase().from("deals").select("lead_id, stage").not("stage", "in", "(won,lost)"),
+  );
+  const stageByLead = new Map(deals.map((d) => [d.lead_id, d.stage]));
+
+  const threads = new Map<string, InboxThread>();
+  for (const r of rows) {
+    let t = threads.get(r.lead_id);
+    if (!t) {
+      t = {
+        leadId: r.lead_id,
+        leadName: r.leads.name,
+        company: r.leads.company,
+        email: r.leads.email ?? "",
+        messages: [],
+        unread: 0,
+        lastAt: r.occurred_at,
+        classification: null,
+        dealStage: stageByLead.get(r.lead_id) ?? null,
+      };
+      threads.set(r.lead_id, t);
+    }
+    t.messages.push({
+      id: r.id,
+      leadId: r.lead_id,
+      direction: r.direction,
+      channel: r.channel,
+      subject: r.subject,
+      body: r.body,
+      occurredAt: r.occurred_at,
+      readAt: r.read_at,
+      classification: r.classification,
+    });
+    if (r.direction === "inbound" && !r.read_at) t.unread += 1;
+    t.lastAt = r.occurred_at;
+    if (r.classification) t.classification = r.classification;
+  }
+  return [...threads.values()].sort((a, b) => b.lastAt.localeCompare(a.lastAt));
+}
+
+export async function getDeals(): Promise<Deal[]> {
+  const rows = unwrap<
+    {
+      id: string;
+      lead_id: string;
+      stage: DealStage;
+      value: number | string;
+      next_step: string;
+      next_step_at: string | null;
+      lost_reason: string | null;
+      stage_changed_at: string;
+      leads: { name: string; company: string };
+    }[]
+  >(
+    await supabase()
+      .from("deals")
+      .select("*, leads(name, company)")
+      .order("stage_changed_at", { ascending: false }),
+  );
+  return rows.map((r) => ({
+    id: r.id,
+    leadId: r.lead_id,
+    leadName: r.leads.name,
+    company: r.leads.company,
+    stage: r.stage,
+    value: Number(r.value),
+    nextStep: r.next_step,
+    nextStepAt: r.next_step_at,
+    lostReason: r.lost_reason,
+    stageChangedAt: r.stage_changed_at,
+  }));
 }

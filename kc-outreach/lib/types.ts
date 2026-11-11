@@ -314,3 +314,62 @@ export interface IntegrationRow {
   meta: Record<string, unknown>;
   updated_at: string;
 }
+
+// ── Phase 9: inbox + pipeline ───────────────────────────────────────────────
+
+export type DealStage = "new_reply" | "qualified" | "meeting_booked" | "proposal" | "won" | "lost";
+
+export const dealStages: DealStage[] = [
+  "new_reply",
+  "qualified",
+  "meeting_booked",
+  "proposal",
+  "won",
+  "lost",
+];
+
+export const dealStageLabels: Record<DealStage, string> = {
+  new_reply: "New Reply",
+  qualified: "Qualified",
+  meeting_booked: "Meeting Booked",
+  proposal: "Proposal",
+  won: "Won",
+  lost: "Lost",
+};
+
+export interface InboxMessage {
+  id: string;
+  leadId: string;
+  direction: "inbound" | "outbound";
+  channel: string;
+  subject: string;
+  body: string;
+  occurredAt: string;
+  readAt: string | null;
+  classification: string | null;
+}
+
+export interface InboxThread {
+  leadId: string;
+  leadName: string;
+  company: string;
+  email: string;
+  messages: InboxMessage[]; // oldest first
+  unread: number;
+  lastAt: string;
+  classification: string | null;
+  dealStage: DealStage | null;
+}
+
+export interface Deal {
+  id: string;
+  leadId: string;
+  leadName: string;
+  company: string;
+  stage: DealStage;
+  value: number;
+  nextStep: string;
+  nextStepAt: string | null;
+  lostReason: string | null;
+  stageChangedAt: string;
+}
