@@ -1,6 +1,8 @@
 # Plan: Resolving the Email Gap
 
-**Status:** open — parked deliberately on 2026-11-13 to finish building the rest of the system.
+**Status:** open — provider choice awaiting Nate's decision as of 2026-11-13.
+Step 1 (domain coverage) is **answered**: see *Measured findings* below. The
+gate is passed, so the decision is live rather than parked.
 **Owner:** Nate
 **Blocks:** every email channel (cold email, follow-ups, warm email). Does not block cold calling or social.
 
@@ -187,3 +189,129 @@ differently).
 Write migration `0007` adding `leads.website`, extend the relay trigger, and
 re-run the Apify actor with website extraction. Everything else waits on that
 one number.
+
+---
+
+## Measured findings (2026-11-13)
+
+Three things were measured against the live database. They change the plan's
+cost and sequencing, and they are recorded here before any provider is picked.
+
+### 1. Domain coverage is 68% — the gate is passed
+
+The plan's Step 1 assumed `website` had to be re-scraped from Apify. It does
+not: **the front door already collects it.** `lead_gen.businesses.website` is
+populated for **82 of 120 businesses (68.3%)**, across **78 distinct hosts**,
+of which only 5 are social or aggregator URLs (Facebook, Yelp, `business.site`
+and similar) rather than real domains.
+
+That clears the plan's own `> 60%` threshold, whose stated consequence is:
+*"a domain-based enricher (Hunter-style) is the right tool, and the job is
+mostly mechanical from here."*
+
+What the relay does with that column today: **nothing.** Migration 0004 reads
+six columns and `website` is not one of them, which is why `outreach.leads`
+looks domain-less. So Step 1 costs no Apify spend and no re-scrape — it is a
+migration adding `leads.website`, an extended relay, and a backfill join on
+`pool_business_id`. The 38 rows without a website are a phone/social cohort
+regardless of which provider wins.
+
+### 2. The upstream pool already has an email slot, and it is empty
+
+`lead_gen.enrichments` exists with exactly the right shape — `business_id`,
+`owner_name`, **`owner_email`**, `owner_linkedin`, `email_source`,
+`confidence`, `enriched_at` — and holds **0 rows**.
+
+Someone designed for this problem upstream and never filled it. That answers
+the plan's first open question (*should the front door enrich at ingest?*) in
+the affirmative: the schema is already there, enriching at ingest means every
+downstream consumer benefits, and it avoids a second enricher living inside
+this app. The relay would then read `enrichments.owner_email` instead of this
+app calling a provider at all.
+
+### 3. The 120 leads are all one niche
+
+Every pooled business carries niche `auto repair` and maps to Local Home
+Services. Conclusions here generalize to that trade, not to the other three
+segments, which have no leads yet.
+
+## Current pricing (checked 2026-11-13)
+
+**Hunter.io** — Free $0 (50 credits/mo), Starter $49/mo or $34/mo annual
+(2,000 credits/mo), Growth $149/mo or $104/mo annual (10,000/mo), Scale
+$299/mo or $209/mo annual (25,000/mo). One shared credit pool across Domain
+Search, Email Finder and Verifier; **1 credit per email found, nothing charged
+when a search finds nothing**; verification costs 0.5 credit. Taken from
+hunter.io/pricing directly.
+
+**Apollo.io** — Basic $49, Professional $79, Organization $119 per seat/month
+billed annually (roughly $65/$99/$149 on monthly billing); Organization is
+reported annual-only with a 3-seat minimum. **Apollo's own pricing page no
+longer publishes credit allowances or seat minimums** — these figures are
+third-party consensus and the credit numbers conflict badly between sources
+(one reports a unified pool, others separate export credits, and Capterra
+reviewers in January 2026 complain paid plans now grant only ~2,500 credits).
+Treat as indicative only; confirm with sales before committing.
+
+**Apify contact-details actors** — pay per use, no subscription. The store has
+many: Contact Info Scraper (vdrmota) from **$1.05/1,000 scraped pages**,
+Website Contact Scraper (pro100chok) from **$1.00/1,000 results**, Contact
+Finder (moorish-dev) from $1.50/1,000, Contact Details Scraper (practicaltools)
+**$4.50/1,000 successful results — empty pages not charged**, up to $10/1,000
+for others. A "result" means a page, a domain or a dataset item depending on
+the actor, so the headline rates are not directly comparable; confirm what each
+counts as billable. Several also extract LinkedIn/Facebook/Instagram profile
+URLs in the same pass, which is the only candidate that would touch the zero
+social coverage.
+
+### What this costs for 82 domains
+
+| option | cost for this list | shape |
+|---|---|---|
+| Apify contact actor | **well under $1** | pay-per-use, already in the stack |
+| Hunter free tier | **$0** for 50, then $34–49/mo | subscription, domain-first |
+| Apollo Basic | **~$588/yr** (1 seat, annual) | per-seat subscription, person-first |
+
+## Recommendation (awaiting decision)
+
+**Run the Apify contact-details actor first; use Hunter's free tier as the
+measurement control; do not buy Apollo for this segment.**
+
+Reasoning, in the order that matters:
+
+1. **Apollo is the wrong shape for this niche, independent of price.** It is a
+   person-first B2B contact graph indexed on job titles at companies with
+   employee records. A two-bay auto repair shop has no such record. Paying
+   ~$588/yr per seat to discover that is the exact mistake the plan warns
+   about. Its LinkedIn coverage is the only real draw, and that is better
+   tested later against a segment that actually lives on LinkedIn.
+2. **Apify is already in the stack, already paid for, and bills per use.** For
+   82 domains the spend is cents, there is no subscription to justify, and for
+   a local trade the public contact page is frequently the *only* place an
+   address exists at all — which is precisely where a crawler wins and a
+   database loses.
+3. **Hunter is the right control, at zero cost.** Its free 50 credits cover a
+   like-for-like sample, it charges nothing for searches that find nothing, and
+   if it beats the crawler on named-person rate then $34/mo annual is an easy
+   yes. Keep it as the fallback, not the opening move.
+4. **Judge on named-person rate, not hit rate**, as the plan already says. A
+   crawler returning `info@` for 80% of shops has not solved the problem; it
+   has produced a low-engagement cohort that needs its own copy and volume.
+
+Sequencing, cheapest-first, each step gated on the last:
+
+1. Migration `0007`: `leads.website`, extend the 0004 relay, backfill the 82.
+   No provider needed, no spend.
+2. Run one Apify contact actor over those 82 domains. Measure hit rate,
+   named-person rate, and how many also yield social URLs.
+3. Run Hunter's free 50 over the **same** sample. Compare on cost per *usable*
+   contact.
+4. Decide where it lives: if the winner is a crawler, strongly prefer putting
+   it in the n8n front door writing `lead_gen.enrichments`, so every consumer
+   gets it, over a second enricher inside this app.
+5. Only then `lib/enrich-contacts.ts` as the plan specifies, behind the
+   provider-agnostic interface.
+
+The deliverability work in Step 4 is unchanged and still gates volume: 120
+sends on newly-purchased addresses from a cold domain is how a sending
+reputation dies.
