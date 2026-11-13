@@ -11,10 +11,11 @@ import {
   Phone,
   Inbox,
   Handshake,
-  Settings,
+  LogOut,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { signOut } from "@/app/actions/auth";
 
 interface NavItem {
   label: string;
@@ -33,8 +34,13 @@ const navItems: NavItem[] = [
   { label: "Call List", href: "/calls", icon: Phone },
 ];
 
-export function AppSidebar() {
+export function AppSidebar({ userEmail }: { userEmail: string }) {
   const pathname = usePathname();
+  // Initials from the email local part, e.g. "nate.carter@" -> "NC".
+  const initials = (userEmail.split("@")[0].match(/[a-zA-Z0-9]+/g) ?? ["?"])
+    .slice(0, 2)
+    .map((part) => part[0]!.toUpperCase())
+    .join("");
 
   return (
     <aside className="fixed inset-y-0 left-0 z-30 flex w-60 flex-col border-r border-sidebar-border bg-sidebar">
@@ -91,22 +97,26 @@ export function AppSidebar() {
 
       {/* Footer */}
       <div className="border-t border-sidebar-border px-3 py-4">
-        <button
-          type="button"
-          className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-sidebar-foreground/60 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
-        >
-          <Settings className="size-4" />
-          Settings
-        </button>
-        <div className="mt-3 flex items-center gap-3 px-3">
-          <div className="flex size-8 items-center justify-center rounded-full bg-gold/15 font-mono text-xs text-gold">
-            NC
+        <div className="flex items-center gap-3 px-3">
+          <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-gold/15 font-mono text-xs text-gold">
+            {initials}
           </div>
-          <div className="leading-tight">
-            <div className="text-sm text-sidebar-foreground">Nate Carter</div>
-            <div className="text-xs text-muted-foreground">Owner</div>
+          <div className="min-w-0 leading-tight">
+            <div className="truncate text-sm text-sidebar-foreground" title={userEmail}>
+              {userEmail}
+            </div>
+            <div className="text-xs text-muted-foreground">Signed in</div>
           </div>
         </div>
+        <form action={signOut} className="mt-3">
+          <button
+            type="submit"
+            className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-sidebar-foreground/60 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
+          >
+            <LogOut className="size-4" />
+            Sign out
+          </button>
+        </form>
       </div>
     </aside>
   );
