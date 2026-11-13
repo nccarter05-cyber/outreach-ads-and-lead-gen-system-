@@ -2,7 +2,12 @@ import "server-only";
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 
 // Service-role client, server only. RLS is enabled with zero policies, so this
-// client is the sole access path until auth lands. Never expose to the browser.
+// client is the sole data access path. Never expose to the browser.
+//
+// This bypasses RLS entirely, which is safe only because every route that
+// reaches it is gated: see proxy.ts and requireUser() in lib/auth.ts. Auth
+// identifies the caller; it does NOT constrain this client's reach, so any new
+// public route must avoid it or filter explicitly.
 
 let client: SupabaseClient<any, any, "outreach"> | null = null;
 
