@@ -23,7 +23,7 @@
     },
     {
       "parameters": {
-        "url": "https://REPLACE-WITH-YOUR-DOMAIN/api/cron/inbox",
+        "url": "https://outreach-app-beta-sooty.vercel.app/api/cron/inbox",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "options": {
