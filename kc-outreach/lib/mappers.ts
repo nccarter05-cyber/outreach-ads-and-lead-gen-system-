@@ -47,6 +47,7 @@ export function mapLead(row: LeadRow, enrichment?: LeadEnrichmentRow | null): Le
     title: row.title,
     email: row.email ?? undefined,
     phone: row.phone ?? undefined,
+    website: row.website ?? undefined,
     linkedinUrl: row.linkedin_url ?? undefined,
     facebookUrl: row.facebook_url ?? undefined,
     instagramUrl: row.instagram_url ?? undefined,

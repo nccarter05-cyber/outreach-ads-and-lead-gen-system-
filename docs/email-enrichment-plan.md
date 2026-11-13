@@ -300,8 +300,8 @@ Reasoning, in the order that matters:
 
 Sequencing, cheapest-first, each step gated on the last:
 
-1. Migration `0007`: `leads.website`, extend the 0004 relay, backfill the 82.
-   No provider needed, no spend.
+1. ~~Migration `0007`: `leads.website`, extend the 0004 relay, backfill the 82.~~
+   **Written 2026-11-13, not yet applied** — see *Step 1 status* below.
 2. Run one Apify contact actor over those 82 domains. Measure hit rate,
    named-person rate, and how many also yield social URLs.
 3. Run Hunter's free 50 over the **same** sample. Compare on cost per *usable*
@@ -315,3 +315,36 @@ Sequencing, cheapest-first, each step gated on the last:
 The deliverability work in Step 4 is unchanged and still gates volume: 120
 sends on newly-purchased addresses from a cold domain is how a sending
 reputation dies.
+
+
+---
+
+## Step 1 status (2026-11-13)
+
+`kc-outreach/supabase/migrations/0007_lead_website.sql` is written and the app
+layer is wired for it (`LeadRow.website`, `Lead.website`, `mapLead`, and the
+domain shown on the lead detail page; `queries.ts` selects `*`, so nothing else
+needed changing). `npm run build` is clean.
+
+**It has not been applied to the database.** Applying it writes to the shared
+kc-backend project, which needs Nate's go-ahead. Nothing reads `leads.website`
+until it is applied — the column simply isn't there, and the UI block is
+conditional, so the app is unaffected either way.
+
+What it does, beyond the three things the sequencing above called for:
+
+- Adds a partial index `leads_enrichable_idx` on `(segment_id) where website is
+  not null and email is null` — the exact worklist query step 2 runs.
+- Adds an `after update of website` trigger on `lead_gen.businesses` that fills
+  `leads.website` **only when it is null**. 0004 deliberately let pool merges
+  not propagate; for phone that is tolerable, but a business that gains a
+  website on a later multi-source pass would otherwise stay unenrichable
+  forever. No merge has happened yet (all 120 rows are single-source with
+  `updated_at = created_at`), so this is forward cover, not a fix for observed
+  data. It is the one piece not strictly required by step 1 — drop it if the
+  front door's merge semantics turn out to make it redundant.
+
+Re-measured against live data before writing: **82 of 120 (68.3%)**, 82
+distinct hosts, 4 social/aggregator URLs. Unchanged from the figures above.
+
+Steps 2–5 are unchanged and still wait on the provider decision.

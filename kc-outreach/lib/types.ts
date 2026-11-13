@@ -63,6 +63,8 @@ export interface Lead {
   title: string;
   email?: string;
   phone?: string;
+  /** Domain as the scrape found it. Distinct from enrichment.website, which Exa inferred. */
+  website?: string;
   linkedinUrl?: string;
   facebookUrl?: string;
   instagramUrl?: string;
@@ -198,6 +200,7 @@ export interface LeadRow {
   title: string;
   email: string | null;
   phone: string | null;
+  website: string | null;
   linkedin_url: string | null;
   facebook_url: string | null;
   instagram_url: string | null;
