@@ -1,5 +1,6 @@
 "use server";
 
+import { assertUser } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import { supabase, unwrap } from "@/lib/supabase";
 
@@ -17,6 +18,7 @@ export async function createSegment(input: {
   description: string;
   criteria: string[];
 }): Promise<ActionResult> {
+  await assertUser();
   try {
     unwrap(
       await supabase()
@@ -37,6 +39,7 @@ export async function createSegment(input: {
 }
 
 export async function deleteSegment(id: string): Promise<ActionResult> {
+  await assertUser();
   try {
     unwrap(await supabase().from("segments").delete().eq("id", id).select("id"));
     revalidatePath("/audiences");

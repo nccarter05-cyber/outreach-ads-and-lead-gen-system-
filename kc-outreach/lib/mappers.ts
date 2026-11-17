@@ -16,6 +16,10 @@ import type {
   SequenceRow,
   SequenceStep,
   SequenceStepRow,
+  SocialAccount,
+  SocialAccountRow,
+  SocialPost,
+  SocialPostRow,
   Weekday,
 } from "./types";
 
@@ -47,6 +51,7 @@ export function mapLead(row: LeadRow, enrichment?: LeadEnrichmentRow | null): Le
     title: row.title,
     email: row.email ?? undefined,
     phone: row.phone ?? undefined,
+    website: row.website ?? undefined,
     linkedinUrl: row.linkedin_url ?? undefined,
     facebookUrl: row.facebook_url ?? undefined,
     instagramUrl: row.instagram_url ?? undefined,
@@ -54,6 +59,7 @@ export function mapLead(row: LeadRow, enrichment?: LeadEnrichmentRow | null): Le
     source: row.source,
     status: row.status,
     segmentId: row.segment_id,
+    sourcePostId: row.source_post_id ?? undefined,
     createdAt: row.created_at,
     enrichment: enrichment ? mapEnrichment(enrichment) : undefined,
   };
@@ -145,5 +151,54 @@ export function mapCallScript(row: AiCopyCacheRow): CallScript {
     questions: p.questions ?? [],
     close: p.close ?? "",
     generatedAt: row.generated_at,
+  };
+}
+
+/** Strips tokens: the result is safe to pass to client components. */
+export function mapSocialAccount(row: SocialAccountRow): SocialAccount {
+  return {
+    id: row.id,
+    platform: row.platform,
+    externalId: row.external_id,
+    name: row.name,
+    handle: row.handle,
+    status: row.status,
+    lastError: row.last_error,
+    tokenExpiresAt: row.token_expires_at,
+    connectedAt: row.connected_at,
+  };
+}
+
+export function mapSocialPost(row: SocialPostRow, leads = 0): SocialPost {
+  return {
+    id: row.id,
+    accountId: row.account_id,
+    platform: row.platform,
+    status: row.status,
+    content: row.content,
+    linkType: row.link_type,
+    linkUrl: row.link_url,
+    trackingCode: row.tracking_code,
+    landingHeadline: row.landing_headline,
+    landingBody: row.landing_body,
+    landingCta: row.landing_cta,
+    segmentId: row.segment_id,
+    scheduledAt: row.scheduled_at,
+    publishedAt: row.published_at,
+    externalPostId: row.external_post_id,
+    permalink: row.permalink,
+    error: row.error,
+    metrics: {
+      impressions: row.impressions,
+      likes: row.likes,
+      comments: row.comments,
+      shares: row.shares,
+      clicks: row.clicks,
+      landingViews: row.landing_views,
+      formSubmissions: row.form_submissions,
+      leads,
+    },
+    metricsUpdatedAt: row.metrics_updated_at,
+    createdAt: row.created_at,
   };
 }

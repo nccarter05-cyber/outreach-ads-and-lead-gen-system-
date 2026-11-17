@@ -1,5 +1,6 @@
 "use server";
 
+import { assertUser } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import { generateReplyDraft } from "@/lib/claude";
 import { pollInbox } from "@/lib/imap";
@@ -19,6 +20,7 @@ function refresh() {
 }
 
 export async function markThreadRead(leadId: string): Promise<void> {
+  await assertUser();
   await supabase()
     .from("messages")
     .update({ read_at: new Date().toISOString() })
@@ -31,6 +33,7 @@ export async function markThreadRead(leadId: string): Promise<void> {
 export async function draftReply(
   leadId: string,
 ): Promise<{ ok: boolean; subject?: string; body?: string; error?: string }> {
+  await assertUser();
   try {
     const db = supabase();
     const row = unwrap<LeadRow & { lead_enrichments: LeadEnrichmentRow | null }>(
@@ -61,6 +64,7 @@ export async function sendInboxReply(input: {
   subject: string;
   body: string;
 }): Promise<{ ok: boolean; pending?: boolean; error?: string }> {
+  await assertUser();
   try {
     const res = await sendReply(input);
     refresh();
@@ -75,6 +79,7 @@ export async function moveDealStage(
   stage: DealStage,
   lostReason?: string,
 ): Promise<{ ok: boolean; error?: string }> {
+  await assertUser();
   try {
     await moveDeal(dealId, stage, lostReason);
     refresh();
@@ -88,6 +93,7 @@ export async function updateDeal(
   dealId: string,
   patch: { value?: number; nextStep?: string },
 ): Promise<{ ok: boolean; error?: string }> {
+  await assertUser();
   try {
     const update: Record<string, unknown> = {};
     if (patch.value !== undefined) update.value = patch.value;
@@ -107,6 +113,7 @@ export async function checkReplies(): Promise<{
   stored?: number;
   error?: string;
 }> {
+  await assertUser();
   try {
     const res = await pollInbox();
     refresh();

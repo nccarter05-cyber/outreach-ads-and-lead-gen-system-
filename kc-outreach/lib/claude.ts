@@ -37,7 +37,9 @@ function leadContext(lead: Lead, enrichment?: Enrichment): string {
   return lines.join("\n");
 }
 
-const SYSTEM = `You write outreach copy for King Circle AI, an AI-first company (owner: Nate Carter) that builds intelligent products, agentic workflows, and automation systems for businesses — AI receptionists, lead-response agents, booking automation, reporting agents, and custom AI builds.
+const BRAND = `King Circle AI is an AI-first company (owner: Nate Carter) that builds intelligent products, agentic workflows, and automation systems for businesses — AI receptionists, lead-response agents, booking automation, reporting agents, and custom AI builds.`;
+
+const SYSTEM = `You write outreach copy for King Circle AI. ${BRAND}
 
 Rules:
 - Personalize using the lead research provided; reference concrete, specific details.
@@ -45,11 +47,24 @@ Rules:
 - No placeholder brackets — every output must be ready to send as-is.
 - Sign emails as "Nate, King Circle AI".`;
 
-async function generateJson<T>(prompt: string, schema: Record<string, unknown>, maxTokens: number): Promise<T> {
+const SOCIAL_SYSTEM = `You write organic social media posts for King Circle AI's own company pages. ${BRAND}
+
+Rules:
+- Write as the founder (Nate) or the company — confident, plain-spoken, specific. Never hypey, never generic "AI is changing everything" filler.
+- Lead with a hook in the first line; it has to earn the "see more" click.
+- Only claim what the brief supports. Never invent client names, results, numbers, or testimonials.
+- No placeholder brackets — every output must be ready to publish as-is.`;
+
+async function generateJson<T>(
+  prompt: string,
+  schema: Record<string, unknown>,
+  maxTokens: number,
+  system: string = SYSTEM,
+): Promise<T> {
   const response = await anthropic().messages.create({
     model: COPY_MODEL,
     max_tokens: maxTokens,
-    system: SYSTEM,
+    system,
     thinking: { type: "disabled" },
     output_config: { format: { type: "json_schema", schema } },
     messages: [{ role: "user", content: prompt }],
@@ -205,5 +220,67 @@ Return a subject line (prefix "Re: " if replying to an existing subject) and the
       additionalProperties: false,
     },
     1024,
+  );
+}
+
+// ── Phase 8: organic social posts ───────────────────────────────────────────
+
+const SOCIAL_PLATFORM_RULES: Record<"facebook" | "instagram" | "linkedin", string> = {
+  facebook:
+    "Facebook Page post. Conversational and local-business friendly. 40–120 words, short paragraphs, 0–2 hashtags at most. If there is a link it renders as a preview card below the text, so don't paste the URL into the body; just point to it (\"details below\").",
+  instagram:
+    "Instagram caption. Hook in the first line (it is truncated after ~125 characters). 60–150 words, line breaks between ideas, then 3–8 relevant hashtags on the last line. Links in captions are NOT clickable — if there's a link, say \"link in bio\". Hard limit 2,200 characters.",
+  linkedin:
+    "LinkedIn Company Page post. Professional founder voice, insight-led: a sharp opening line, a short story or concrete observation, a takeaway. 100–220 words, single-sentence paragraphs with line breaks, up to 3 hashtags at the end. If there's a link it renders as an article card, so don't paste the URL into the text. Hard limit 3,000 characters.",
+};
+
+export interface GeneratedSocialPost {
+  content: string;
+  landingHeadline: string;
+  landingBody: string;
+  landingCta: string;
+}
+
+/**
+ * One post for one platform, plus the copy for its lead-capture landing page
+ * (used when the post links to /lp/[code]).
+ */
+export async function generateSocialCopy(args: {
+  platform: "facebook" | "instagram" | "linkedin";
+  brief: string;
+  audience?: { name: string; description: string; criteria: string[] };
+  withLanding: boolean;
+}): Promise<GeneratedSocialPost> {
+  const audience = args.audience
+    ? `Target audience: ${args.audience.name} — ${args.audience.description}${args.audience.criteria.length ? ` (${args.audience.criteria.join("; ")})` : ""}`
+    : "Target audience: small and mid-sized business owners.";
+  return generateJson<GeneratedSocialPost>(
+    `Write one social post.
+
+Platform rules: ${SOCIAL_PLATFORM_RULES[args.platform]}
+
+${audience}
+
+Brief from Nate:
+${args.brief}
+
+${
+  args.withLanding
+    ? "The post links to a lead-capture landing page. Also write that page: a headline (under 12 words) that continues the post's promise, a body (2–4 sentences on what they get by reaching out and what happens next), and a call-to-action button label (2–5 words)."
+    : "There is no landing page; set landingHeadline, landingBody and landingCta to empty strings."
+}`,
+    {
+      type: "object",
+      properties: {
+        content: { type: "string", description: "The post text, ready to publish" },
+        landingHeadline: { type: "string" },
+        landingBody: { type: "string" },
+        landingCta: { type: "string" },
+      },
+      required: ["content", "landingHeadline", "landingBody", "landingCta"],
+      additionalProperties: false,
+    },
+    2048,
+    SOCIAL_SYSTEM,
   );
 }

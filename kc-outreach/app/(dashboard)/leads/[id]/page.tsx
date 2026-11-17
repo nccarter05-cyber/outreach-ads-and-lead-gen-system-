@@ -117,6 +117,19 @@ export default async function LeadDetailPage({
                     <span className="font-mono text-xs">{lead.phone}</span>
                   </div>
                 )}
+                {lead.website && (
+                  <div className="flex items-center gap-2.5">
+                    <Globe className="size-3.5 text-muted-foreground" />
+                    <a
+                      href={lead.website}
+                      target="_blank"
+                      rel="noreferrer noopener"
+                      className="font-mono text-xs underline-offset-4 hover:text-gold hover:underline"
+                    >
+                      {lead.website.replace(/^https?:\/\//, "").replace(/\/$/, "")}
+                    </a>
+                  </div>
+                )}
                 {lead.linkedinUrl && (
                   <div className="flex items-center gap-2.5">
                     <ChannelIcon channel="linkedin" />

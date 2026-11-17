@@ -77,7 +77,7 @@ Supabase (Postgres + Auth + Storage)
 - Vercel project setup
 
 ### Phase 2: Lead Generation
-> **Superseded by the [Lead Sourcing Front Door](../lead-sourcing-front-door.md).** Lead sourcing is now centralized company-wide in one n8n front-door workflow that scrapes multi-source, dedupes globally, and fans the outreach-bound leads into this system's `lead_gen` schema. The Apify-wrapper-in-the-app approach below is retained only as historical context.
+> **Superseded by the [Lead Sourcing Front Door](docs/lead-sourcing-front-door.md).** Lead sourcing is now centralized company-wide in one n8n front-door workflow that scrapes multi-source, dedupes globally, and fans the outreach-bound leads into this system's `lead_gen` schema. The Apify-wrapper-in-the-app approach below is retained only as historical context.
 
 - Apify API wrapper service (`/lib/apify.ts`)
   - Google Maps actor: `compass/crawler-google-places` — input: query string, location
@@ -154,6 +154,19 @@ Supabase (Postgres + Auth + Storage)
 - **Validation** — JPEG/PNG, ≤8MB, IG aspect ratio 4:5 – 1.91:1; reject in the composer before save.
 - **`/lib/meta.ts`** — Facebook: `/{page}/photos` with the image URL; Instagram: image container → publish (same two-step flow as text). Carousel deferred.
 - **`/lib/linkedin.ts`** — `registerUpload` → binary upload → asset URN on the post; stays gated with the rest of LinkedIn.
+
+### Phase 8.2: AI UGC Ads via Higgsfield MCP *(generation: no deps; publishing: depends on 8 + 8.1)*
+> Full plan: [docs/ugc-ads-plan.md](docs/ugc-ads-plan.md). Short vertical UGC-style videos advertising King Circle's services (SaaS demo, tutorial, faceless explainer, talking-head hook), generated through the official Higgsfield MCP.
+
+- **Where it runs:** Higgsfield MCP is OAuth-only with no API key, so **generation runs in a Claude Code operator session through project skills** (`ugc-ad` orchestrator + per-format skills). FFmpeg post-production also runs locally. The app is the system of record and the cost-approval gate (`/social/ads`).
+- **Schema:** migration `0009_ugc.sql` adds `ugc_products` (with verified claims), `ugc_personas`, `ugc_briefs`, `ugc_variants`, `ugc_jobs` (the Higgsfield job tracker, so jobs survive a lost session) and `ugc_assets`. Videos go in the 8.1 `social-media` bucket, which gets pulled forward.
+- **Guardrails:**
+  - No job runs without an approved brief whose credit estimate fits the caps, because Higgsfield has no spend cap.
+  - Only verified claims are allowed.
+  - No fake testimonials.
+  - Only AI personas, or a real face with documented consent.
+  - Publishing is blocked until the platform AI label is applied and logged.
+- **Publishing (8.2b):** Reels/video added to `lib/meta.ts`; `social_posts` gains `ugc_asset_id` and `ai_label_applied`. TikTok goes through Higgsfield's direct post in v1.
 
 ### Phase 9: Reply Inbox + CRM Pipeline *(depends on Phase 6; Phase 8 landing pages feed it)*
 > Today the Instantly webhook only flips statuses to `replied` — reply text is never stored and nothing tracks what happens after a reply. This phase adds a unified inbox and a native deal pipeline (no HubSpot — kept in the `outreach` schema so agents can read/write it directly).

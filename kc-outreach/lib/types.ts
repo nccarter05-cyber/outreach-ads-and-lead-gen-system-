@@ -7,7 +7,7 @@ export type Channel = "email" | "linkedin" | "facebook" | "instagram";
 /** Channels stored in ai_copy_cache — includes call scripts. */
 export type CopyChannel = Channel | "call";
 
-export type LeadSource = "google_maps" | "linkedin" | "manual" | "scraped";
+export type LeadSource = "google_maps" | "linkedin" | "manual" | "scraped" | "social";
 
 export type LeadStatus =
   | "new"
@@ -63,6 +63,8 @@ export interface Lead {
   title: string;
   email?: string;
   phone?: string;
+  /** Domain as the scrape found it. Distinct from enrichment.website, which Exa inferred. */
+  website?: string;
   linkedinUrl?: string;
   facebookUrl?: string;
   instagramUrl?: string;
@@ -70,6 +72,8 @@ export interface Lead {
   source: LeadSource;
   status: LeadStatus;
   segmentId: string | null;
+  /** Set when the lead came in through a social post's landing page. */
+  sourcePostId?: string;
   createdAt: string;
   enrichment?: Enrichment;
 }
@@ -171,6 +175,7 @@ export const sourceLabels: Record<LeadSource, string> = {
   linkedin: "LinkedIn",
   manual: "Manual",
   scraped: "Scraped",
+  social: "Social",
 };
 
 export const copySourceLabels: Record<CopySource, string> = {
@@ -198,6 +203,7 @@ export interface LeadRow {
   title: string;
   email: string | null;
   phone: string | null;
+  website: string | null;
   linkedin_url: string | null;
   facebook_url: string | null;
   instagram_url: string | null;
@@ -205,6 +211,7 @@ export interface LeadRow {
   source: LeadSource;
   status: LeadStatus;
   segment_id: string | null;
+  source_post_id?: string | null;
   created_at: string;
 }
 
@@ -372,4 +379,124 @@ export interface Deal {
   nextStepAt: string | null;
   lostReason: string | null;
   stageChangedAt: string;
+}
+
+// ── Phase 8: organic social posting ────────────────────────────────────────
+
+/** Platforms the app publishes to. (tiktok rows may exist from 8.2; not published here.) */
+export type SocialPlatform = "facebook" | "instagram" | "linkedin";
+
+export type SocialPostStatus = "draft" | "scheduled" | "publishing" | "published" | "failed";
+
+export type SocialAccountStatus = "active" | "expired" | "error" | "disconnected";
+
+export type SocialLinkType = "landing" | "custom" | "none";
+
+export const socialPlatforms: SocialPlatform[] = ["facebook", "instagram", "linkedin"];
+
+export const socialPlatformLabels: Record<SocialPlatform, string> = {
+  facebook: "Facebook",
+  instagram: "Instagram",
+  linkedin: "LinkedIn",
+};
+
+/** Hard caption/commentary limits per platform. */
+export const socialCharLimits: Record<SocialPlatform, number> = {
+  facebook: 63206,
+  instagram: 2200,
+  linkedin: 3000,
+};
+
+/** Safe-for-the-browser view of a connected account (never includes tokens). */
+export interface SocialAccount {
+  id: string;
+  platform: SocialPlatform;
+  externalId: string;
+  name: string;
+  handle: string | null;
+  status: SocialAccountStatus;
+  lastError: string | null;
+  tokenExpiresAt: string | null;
+  connectedAt: string;
+}
+
+export interface SocialPostMetrics {
+  impressions: number;
+  likes: number;
+  comments: number;
+  shares: number;
+  clicks: number;
+  landingViews: number;
+  formSubmissions: number;
+  leads: number;
+}
+
+export interface SocialPost {
+  id: string;
+  accountId: string | null;
+  platform: SocialPlatform;
+  status: SocialPostStatus;
+  content: string;
+  linkType: SocialLinkType;
+  linkUrl: string | null;
+  trackingCode: string;
+  landingHeadline: string;
+  landingBody: string;
+  landingCta: string;
+  segmentId: string | null;
+  scheduledAt: string | null;
+  publishedAt: string | null;
+  externalPostId: string | null;
+  permalink: string | null;
+  error: string | null;
+  metrics: SocialPostMetrics;
+  metricsUpdatedAt: string | null;
+  createdAt: string;
+}
+
+export interface SocialAccountRow {
+  id: string;
+  platform: SocialPlatform;
+  external_id: string;
+  name: string;
+  handle: string | null;
+  access_token: string | null;
+  refresh_token: string | null;
+  token_expires_at: string | null;
+  status: SocialAccountStatus;
+  last_error: string | null;
+  meta: Record<string, unknown>;
+  connected_at: string;
+  updated_at: string;
+}
+
+export interface SocialPostRow {
+  id: string;
+  account_id: string | null;
+  platform: SocialPlatform;
+  status: SocialPostStatus;
+  content: string;
+  link_type: SocialLinkType;
+  link_url: string | null;
+  tracking_code: string;
+  landing_headline: string;
+  landing_body: string;
+  landing_cta: string;
+  segment_id: string | null;
+  scheduled_at: string | null;
+  published_at: string | null;
+  external_post_id: string | null;
+  permalink: string | null;
+  error: string | null;
+  attempts: number;
+  impressions: number;
+  likes: number;
+  comments: number;
+  shares: number;
+  clicks: number;
+  metrics_updated_at: string | null;
+  landing_views: number;
+  form_submissions: number;
+  created_at: string;
+  updated_at: string;
 }

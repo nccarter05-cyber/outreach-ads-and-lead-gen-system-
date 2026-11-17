@@ -1,5 +1,6 @@
 "use server";
 
+import { assertUser } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import { supabase, unwrap } from "@/lib/supabase";
 import type { Channel, CopySource, SequenceStepRow } from "@/lib/types";
@@ -32,6 +33,7 @@ interface SaveResult {
 }
 
 export async function saveSequence(input: SequenceInput): Promise<SaveResult> {
+  await assertUser();
   const db = supabase();
   try {
     let sequenceId = input.id;
@@ -122,6 +124,7 @@ export async function saveSequence(input: SequenceInput): Promise<SaveResult> {
 }
 
 export async function duplicateSequence(id: string): Promise<SaveResult> {
+  await assertUser();
   const db = supabase();
   try {
     const seq = unwrap<{ name: string; description: string; segment_id: string | null } | null>(
@@ -170,6 +173,7 @@ export async function duplicateSequence(id: string): Promise<SaveResult> {
 }
 
 export async function deleteSequence(id: string): Promise<SaveResult> {
+  await assertUser();
   try {
     unwrap(await supabase().from("sequences").delete().eq("id", id).select("id"));
     revalidatePath("/sequences");

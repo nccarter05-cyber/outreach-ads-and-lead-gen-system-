@@ -1,0 +1,71 @@
+{
+  "name": "KC Outreach \u2014 Social Publisher (hourly)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 1,
+              "triggerAtMinute": 5
+            }
+          ]
+        }
+      },
+      "id": "schedule-hourly-social",
+      "name": "Every hour (:05)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://outreach-app-beta-sooty.vercel.app/api/cron/social",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 300000,
+          "response": {
+            "response": {
+              "neverError": true,
+              "fullResponse": true
+            }
+          }
+        }
+      },
+      "id": "call-social-tick",
+      "name": "Publish due posts + refresh metrics",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        220,
+        0
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "KC Outreach CRON_SECRET"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Every hour (:05)": {
+      "main": [
+        [
+          {
+            "node": "Publish due posts + refresh metrics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
