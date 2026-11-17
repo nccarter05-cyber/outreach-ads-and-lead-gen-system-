@@ -1,5 +1,6 @@
 "use server";
 
+import { assertUser } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import { structureEnrichment } from "@/lib/claude";
 import { enrichLead } from "@/lib/exa";
@@ -24,6 +25,7 @@ export async function createLead(input: {
   source?: LeadSource;
   segmentId?: string;
 }): Promise<{ ok: boolean; id?: string; error?: string }> {
+  await assertUser();
   try {
     const rows = unwrap<{ id: string }[]>(
       await supabase()
@@ -59,6 +61,7 @@ export async function updateLeadStatus(
   id: string,
   status: LeadStatus,
 ): Promise<{ ok: boolean; error?: string }> {
+  await assertUser();
   try {
     unwrap(await supabase().from("leads").update({ status }).eq("id", id).select("id"));
     if (status === "replied" || status === "booked" || status === "not_interested") {
@@ -86,6 +89,7 @@ export async function updateLeadStatus(
 export async function enrichLeads(
   ids: string[],
 ): Promise<{ ok: boolean; enriched: number; failed: number; error?: string }> {
+  await assertUser();
   const db = supabase();
   let enriched = 0;
   let failed = 0;

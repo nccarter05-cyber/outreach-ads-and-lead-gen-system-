@@ -1,11 +1,13 @@
 "use server";
 
+import { assertUser } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import { runOutreachTick, type TickResult } from "@/lib/processor";
 
 export async function runSchedulerNow(): Promise<
   { ok: true; result: TickResult } | { ok: false; error: string }
 > {
+  await assertUser();
   try {
     const result = await runOutreachTick();
     revalidatePath("/campaigns");

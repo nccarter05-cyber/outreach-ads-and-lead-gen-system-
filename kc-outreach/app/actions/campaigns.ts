@@ -1,5 +1,6 @@
 "use server";
 
+import { assertUser } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import { ensureCampaignScaffolding, setInstantlyCampaignStatus } from "@/lib/instantly";
 import { mapCampaign, mapStep } from "@/lib/mappers";
@@ -38,6 +39,7 @@ export async function createCampaign(input: {
   schedule: CampaignSchedule;
   launch: boolean;
 }): Promise<{ ok: boolean; id?: string; error?: string }> {
+  await assertUser();
   const db = supabase();
   try {
     let leadIds: string[];
@@ -99,6 +101,7 @@ export async function setCampaignStatus(
   id: string,
   status: "active" | "paused",
 ): Promise<{ ok: boolean; error?: string }> {
+  await assertUser();
   const db = supabase();
   try {
     const row = unwrap<CampaignRow | null>(
@@ -134,6 +137,7 @@ export async function addLeadToCampaign(
   campaignId: string,
   leadId: string,
 ): Promise<{ ok: boolean; error?: string }> {
+  await assertUser();
   const db = supabase();
   try {
     const { error } = await db
@@ -157,6 +161,7 @@ export async function addLeadToCampaign(
 }
 
 export async function deleteCampaign(id: string): Promise<{ ok: boolean; error?: string }> {
+  await assertUser();
   try {
     unwrap(await supabase().from("campaigns").delete().eq("id", id).select("id"));
     revalidateCampaignPaths();

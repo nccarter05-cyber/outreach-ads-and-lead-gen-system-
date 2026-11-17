@@ -1,5 +1,6 @@
 "use server";
 
+import { assertUser } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import { generateCallScript, generateEmailCopy } from "@/lib/claude";
 import { mapLead } from "@/lib/mappers";
@@ -59,6 +60,7 @@ export async function generateChannelCopy(
   leadId: string,
   channel: Channel,
 ): Promise<{ ok: boolean; error?: string }> {
+  await assertUser();
   try {
     const lead = await fetchLead(leadId);
     const copy = await generateEmailCopy({
@@ -78,6 +80,7 @@ export async function generateChannelCopy(
 export async function generateCallScriptForLead(
   leadId: string,
 ): Promise<{ ok: boolean; error?: string }> {
+  await assertUser();
   try {
     const lead = await fetchLead(leadId);
     const script = await generateCallScript({ lead, enrichment: lead.enrichment });
@@ -94,6 +97,7 @@ export async function generateCallScriptForLead(
 export async function generateMissingScripts(
   segmentId?: string,
 ): Promise<{ ok: boolean; generated: number; failed: number; error?: string }> {
+  await assertUser();
   const db = supabase();
   let generated = 0;
   let failed = 0;
