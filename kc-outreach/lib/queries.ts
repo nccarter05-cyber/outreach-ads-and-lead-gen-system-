@@ -8,6 +8,8 @@ import {
   mapLog,
   mapSegment,
   mapSequence,
+  mapSocialAccount,
+  mapSocialPost,
 } from "./mappers";
 import type {
   AiCopy,
@@ -29,6 +31,10 @@ import type {
   Sequence,
   SequenceRow,
   SequenceStepRow,
+  SocialAccount,
+  SocialAccountRow,
+  SocialPost,
+  SocialPostRow,
 } from "./types";
 
 type LeadWithEnrichment = LeadRow & { lead_enrichments: LeadEnrichmentRow | null };
@@ -316,4 +322,37 @@ export async function getDeals(): Promise<Deal[]> {
     lostReason: r.lost_reason,
     stageChangedAt: r.stage_changed_at,
   }));
+}
+
+// ── Phase 8: social ─────────────────────────────────────────────────────────
+
+/** Connected accounts, tokens stripped (safe for client components). */
+export async function getSocialAccounts(): Promise<SocialAccount[]> {
+  const rows = unwrap<SocialAccountRow[]>(
+    await supabase()
+      .from("social_accounts")
+      .select("*")
+      .in("platform", ["facebook", "instagram", "linkedin"])
+      .order("platform")
+      .order("name"),
+  );
+  return rows.map(mapSocialAccount);
+}
+
+/** Posts with their attributed lead counts (leads.source_post_id). */
+export async function getSocialPosts(): Promise<SocialPost[]> {
+  const [postRes, leadRes] = await Promise.all([
+    supabase()
+      .from("social_posts")
+      .select("*")
+      .in("platform", ["facebook", "instagram", "linkedin"])
+      .order("created_at", { ascending: false })
+      .limit(500),
+    supabase().from("leads").select("source_post_id").not("source_post_id", "is", null),
+  ]);
+  const leadCounts = new Map<string, number>();
+  for (const l of unwrap<{ source_post_id: string }[]>(leadRes)) {
+    leadCounts.set(l.source_post_id, (leadCounts.get(l.source_post_id) ?? 0) + 1);
+  }
+  return unwrap<SocialPostRow[]>(postRes).map((r) => mapSocialPost(r, leadCounts.get(r.id) ?? 0));
 }

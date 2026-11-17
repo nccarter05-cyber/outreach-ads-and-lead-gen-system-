@@ -11,6 +11,7 @@ import {
   Phone,
   Inbox,
   Handshake,
+  Share2,
   LogOut,
   type LucideIcon,
 } from "lucide-react";
@@ -29,6 +30,7 @@ const navItems: NavItem[] = [
   { label: "Audiences", href: "/audiences", icon: Target },
   { label: "Sequences", href: "/sequences", icon: ListOrdered },
   { label: "Campaigns", href: "/campaigns", icon: Megaphone },
+  { label: "Social", href: "/social", icon: Share2 },
   { label: "Inbox", href: "/inbox", icon: Inbox },
   { label: "Pipeline", href: "/pipeline", icon: Handshake },
   { label: "Call List", href: "/calls", icon: Phone },

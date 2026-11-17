@@ -47,6 +47,21 @@ curl -i -H "Authorization: Bearer $CRON_SECRET" https://<your-domain>/api/cron/i
 replies don't need this: they arrive via `/api/webhooks/instantly?secret=...`
 (set `INSTANTLY_WEBHOOK_SECRET`).
 
+## Social publisher (Phase 8)
+
+Import `social-publisher.workflow.json`, reuse the same `KC Outreach CRON_SECRET`
+credential, activate. It calls `/api/cron/social` hourly at :05 (offset from the
+outreach tick). Each run publishes scheduled posts that are due and refreshes
+platform metrics on posts from the last 30 days. Test with:
+
+```bash
+curl -i -H "Authorization: Bearer $CRON_SECRET" https://<your-domain>/api/cron/social
+```
+
+`200 {"ok":true,"result":{"published":0,...}}` is normal with nothing scheduled.
+Posts that can't go out (LinkedIn not yet approved, Instagram without an image,
+no connected account) are moved back to drafts with the reason in `notes`.
+
 ## If you get 401
 
 The header is right and the secret matches, and it still 401s? Check these in
@@ -78,5 +93,4 @@ which is a reasonable trade for a cron trigger token (but not for
 - `maxDuration` on the route is 300s, so the HTTP node's timeout is set to match.
 - `neverError` is on so a failing tick shows up in the n8n execution log as a
   non-200 response rather than halting the workflow.
-- The same pattern applies to `/api/cron/social` when Phase 8 lands — add a
-  second schedule node reusing this credential.
+- `/api/cron/social` (Phase 8) has its own workflow — see below.

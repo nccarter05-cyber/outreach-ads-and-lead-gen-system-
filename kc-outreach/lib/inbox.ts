@@ -97,7 +97,7 @@ export async function ingestInbound(args: InboundArgs): Promise<{ stored: boolea
   return { stored: true, leadId: lead.id };
 }
 
-async function ensureOpenDeal(leadId: string): Promise<void> {
+export async function ensureOpenDeal(leadId: string): Promise<void> {
   const db = supabase();
   const { count } = await db
     .from("deals")

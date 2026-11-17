@@ -85,3 +85,16 @@ export async function requireUser(): Promise<SessionUser> {
   if (!user) redirect("/login");
   return user;
 }
+
+/**
+ * Auth check for server actions. Unlike requireUser() it throws a plain Error
+ * instead of redirecting, so actions that wrap their body in try/catch return
+ * a readable "not signed in" instead of a swallowed NEXT_REDIRECT. Server
+ * actions are POST endpoints reachable from ANY page (including public ones
+ * like /login and /lp), so proxy.ts alone does not protect them.
+ */
+export async function assertUser(): Promise<SessionUser> {
+  const user = await getSessionUser();
+  if (!user) throw new Error("Not signed in");
+  return user;
+}
